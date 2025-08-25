@@ -86,28 +86,14 @@ async function generateResponse(message) {
     } else if (lowerMessage.includes('bye')) {
         return 'Goodbye! ?? Feel free to message me anytime for customer information.';
         
-    } else if (mobileMatch && (indianMobile.test(message) || uaeMobile.test(message) || generalMobile.test(message.trim()))) {
-        // Extract and clean mobile number
-        let mobileNumber = mobileMatch[0];
+    } else if (mobileMatch) {
+        // Use the mobile number as entered by user
+        let mobileNumber = mobileMatch[0].trim();
         
-        // Clean the number based on country patterns
-        if (indianMobile.test(message)) {
-            // Remove +91, 91, 0 prefixes for Indian numbers
-            mobileNumber = mobileNumber.replace(/^(\+91|91|0)/, '');
-        } else if (uaeMobile.test(message)) {
-            // For UAE numbers, keep the format as is or remove country code
-            mobileNumber = mobileNumber.replace(/^(\+971|971)/, '0');
-            // If it doesn't start with 0, add it
-            if (!mobileNumber.startsWith('0')) {
-                mobileNumber = '0' + mobileNumber;
-            }
-        } else {
-            // For other international numbers, clean minimal formatting
-            mobileNumber = mobileNumber.replace(/^\+/, '');
-        }
+        console.log(`Processing mobile number: ${mobileNumber}`);
         
         // Fetch customer info from ERPNext
-        return await getCustomerByMobile(mobileNumber.trim());
+        return await getCustomerByMobile(mobileNumber);
         
     } else {
         return '? Please send a valid mobile number to get customer address.\n\n*Supported formats:*\n• Indian: 9876543210\n• UAE: 0566337875\n• International: +971566337875\n\nType "help" for more options.';
@@ -120,106 +106,24 @@ async function getCustomerByMobile(mobileNumber) {
         // ERPNext API endpoint to search customers
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
         
-        // Try multiple search patterns and field names since different ERPNext versions use different fields
-        const searchPatterns = [
-            mobileNumber,                    // As provided
-            `+${mobileNumber}`,             // With + prefix
-            mobileNumber.replace(/^0/, ''), // Remove leading 0
-            `0${mobileNumber}`,             // Add leading 0
-        ];
+        console.log(`Searching for customer with mobile: ${mobileNumber}`);
         
-        // Different field names that might be used for mobile numbers
-        const mobileFields = ['mobile_no', 'phone', 'mobile', 'mobile_number'];
-        
-        let customers = [];
-        
-        // First, try a simple search without filters to test basic API access
-        try {
-            console.log('Testing basic API access...');
-            const basicResponse = await axios.get(searchUrl, {
-                headers: {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                    'Content-Type': 'application/json'
-                },
-                params: {
-                    limit: 1
-                }
-            });
-            console.log('Basic API access works, proceeding with filtered search...');
-        } catch (basicErr) {
-            console.error('Basic API access failed:', basicErr.response?.status, basicErr.message);
-            throw basicErr;
-        }
-
-        // Try each field name with each pattern until we find a match
-        for (const fieldName of mobileFields) {
-            if (customers.length > 0) break; // Stop if we found customers
-            
-            for (const pattern of searchPatterns) {
-                if (customers.length > 0) break; // Stop if we found customers
-                
-                try {
-                    // Use simpler filter format that works better with some ERPNext versions
-                    const filterArray = [[fieldName, '=', pattern]];
-                    
-                    const response = await axios.get(searchUrl, {
-                        headers: {
-                            'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        params: {
-                            filters: JSON.stringify(filterArray),
-                            fields: '["name","customer_name","mobile_no","customer_primary_address","phone","mobile"]',
-                            limit: 10
-                        }
-                    });
-                    
-                    if (response.data.data && response.data.data.length > 0) {
-                        customers = response.data.data;
-                        console.log(`Found customer with field ${fieldName} and pattern: ${pattern}`);
-                        break;
-                    } else {
-                        console.log(`No results for field ${fieldName} with pattern ${pattern}`);
-                    }
-                } catch (err) {
-                    console.log(`Search failed for field ${fieldName} with pattern ${pattern}:`, err.response?.status, err.message);
-                    
-                    // Try alternative API method for this pattern
-                    try {
-                        console.log(`Trying alternative method for ${fieldName}: ${pattern}`);
-                        const altResponse = await axios.post(`${ERPNEXT_URL}/api/method/frappe.client.get_list`, {
-                            doctype: 'Customer',
-                            filters: {
-                                [fieldName]: pattern
-                            },
-                            fields: ['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile'],
-                            limit_page_length: 10
-                        }, {
-                            headers: {
-                                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                                'Content-Type': 'application/json'
-                            }
-                        });
-                        
-                        if (altResponse.data.message && altResponse.data.message.length > 0) {
-                            customers = altResponse.data.message;
-                            console.log(`Found customer using alternative method with ${fieldName}: ${pattern}`);
-                            break;
-                        }
-                    } catch (altErr) {
-                        console.log(`Alternative method also failed for ${fieldName} with ${pattern}:`, altErr.response?.status);
-                    }
-                    continue; // Try next combination
-                }
+        const response = await axios.get(searchUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([['mobile_no', '=', mobileNumber]]),
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address'])
             }
-        }
+        });
+
+        const customers = response.data.data;
         
         if (customers && customers.length > 0) {
             const customer = customers[0];
-            
-            // Get the mobile number from whatever field it's stored in
-            const displayMobile = customer.mobile_no || customer.phone || customer.mobile || 'N/A';
+            console.log(`Found customer: ${customer.customer_name}`);
             
             // Get detailed address information
             const addressInfo = await getCustomerAddress(customer.customer_primary_address || customer.name);
@@ -227,7 +131,7 @@ async function getCustomerByMobile(mobileNumber) {
             // Get custom documents/fields linked to this customer
             const customDocsInfo = await getCustomDocuments(customer.name);
             
-            let response = `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${displayMobile}\n\n${addressInfo}`;
+            let response = `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
             
             if (customDocsInfo) {
                 response += `\n\n${customDocsInfo}`;
@@ -236,16 +140,19 @@ async function getCustomerByMobile(mobileNumber) {
             return response;
             
         } else {
+            console.log(`No customer found for mobile: ${mobileNumber}`);
             return `? *Customer Not Found*\n\nNo customer found with mobile number: ${mobileNumber}\n\nPlease check the number and try again.`;
         }
         
     } catch (error) {
-        console.error('Error fetching customer:', error.response?.data || error.message);
+        console.error('Error fetching customer:', error.response?.status, error.response?.data || error.message);
         
         if (error.response?.status === 401) {
             return '?? Authentication failed. Please check ERPNext credentials.';
         } else if (error.response?.status === 404) {
             return '?? ERPNext server not found. Please check the URL.';
+        } else if (error.response?.status === 417) {
+            return '?? ERPNext API request format issue. Please contact support.';
         } else {
             return '?? Unable to fetch customer information. Please try again later.';
         }
