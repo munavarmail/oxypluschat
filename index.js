@@ -78,13 +78,13 @@ async function generateResponse(message) {
     const generalMobile = /^[\+]?[0-9]{8,15}$/;
     
     if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-        return 'Hello! ??\n\nI can help you find customer information.\n\n?? *Send a mobile number* to get customer details\n\n?? Type "help" for more options';
+        return 'Hello!\n\nI can help you find customer information.\n\n*Send a mobile number* to get customer details\n\nType "help" for more options';
         
     } else if (lowerMessage.includes('help')) {
-        return '?? *Available Commands:*\n\n?? Send mobile number to get customer details\n   Example: 0502594880\n\n?? "hello" - Greeting\n?? "help" - Show this menu\n?? "bye" - End conversation';
+        return '*AVAILABLE COMMANDS:*\n\nSend mobile number to get customer details\nExample: 0502594880\n\n"hello" - Greeting\n"help" - Show this menu\n"bye" - End conversation';
         
     } else if (lowerMessage.includes('bye')) {
-        return 'Goodbye! ?? Feel free to message me anytime for customer information.';
+        return 'Goodbye! Feel free to message me anytime for customer information.';
         
     } else if (mobileMatch) {
         // Use the mobile number as entered by user
@@ -96,7 +96,7 @@ async function generateResponse(message) {
         return await getCustomerByMobile(mobileNumber);
         
     } else {
-        return '? Please send a valid mobile number to get customer address.\n\n*Supported formats:*\n• Indian: 9876543210\n• UAE: 0566337875\n• International: +971566337875\n\nType "help" for more options.';
+        return 'Please send a valid mobile number to get customer details.\n\n*Example:* 0502594880\n\nType "help" for more options.';
     }
 }
 
@@ -131,30 +131,30 @@ async function getCustomerByMobile(mobileNumber) {
             // Get custom documents/fields linked to this customer
             const customDocsInfo = await getCustomDocuments(customer.name);
             
-            let response = `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
+            let response = `*CUSTOMER FOUND*\n\n*Name:* ${customer.customer_name}\n*Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
             
             if (customDocsInfo) {
-                response += `\n${customDocsInfo}`;
+                response += `${customDocsInfo}`;
             }
             
             return response;
             
         } else {
             console.log(`No customer found for mobile: ${mobileNumber}`);
-            return `? *Customer Not Found*\n\nNo customer found with mobile number: ${mobileNumber}\n\nPlease check the number and try again.`;
+            return `*CUSTOMER NOT FOUND*\n\nNo customer found with mobile number: ${mobileNumber}\n\nPlease check the number and try again.`;
         }
         
     } catch (error) {
         console.error('Error fetching customer:', error.response?.status, error.response?.data || error.message);
         
         if (error.response?.status === 401) {
-            return '?? Authentication failed. Please check ERPNext credentials.';
+            return 'Authentication failed. Please check ERPNext credentials.';
         } else if (error.response?.status === 404) {
-            return '?? ERPNext server not found. Please check the URL.';
+            return 'ERPNext server not found. Please check the URL.';
         } else if (error.response?.status === 417) {
-            return '?? ERPNext API request format issue. Please contact support.';
+            return 'ERPNext API request format issue. Please contact support.';
         } else {
-            return '?? Unable to fetch customer information. Please try again later.';
+            return 'Unable to fetch customer information. Please try again later.';
         }
     }
 }
@@ -233,7 +233,7 @@ async function getDocumentDetails(docType, docName) {
         if (!docData) return null;
         
         // Format the document information
-        let docInfo = `?? *${docData.name || docData.title || docType}:*\n`;
+        let docInfo = `\n*${docData.name || docData.title || docType}:*\n`;
         
         // Custom fields to display (add your custom field names here)
         const customFields = [
@@ -246,23 +246,35 @@ async function getDocumentDetails(docType, docName) {
             // Add more custom field names as needed
         ];
         
+        let hasCustomFields = false;
+        
         // Display custom fields if they exist
         customFields.forEach(field => {
             if (docData[field] !== undefined && docData[field] !== null) {
                 const fieldValue = docData[field];
                 const displayName = field.replace(/custom_|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 docInfo += `${displayName}: ${fieldValue}\n`;
+                hasCustomFields = true;
             }
         });
         
         // If no custom fields found, show some basic info
-        if (!customFields.some(field => docData[field] !== undefined)) {
-            if (docData.address_line1) docInfo += `Address: ${docData.address_line1}\n`;
-            if (docData.city) docInfo += `City: ${docData.city}\n`;
-            if (docData.pincode) docInfo += `Pincode: ${docData.pincode}\n`;
+        if (!hasCustomFields) {
+            if (docData.address_line1) {
+                docInfo += `Address: ${docData.address_line1}\n`;
+                hasCustomFields = true;
+            }
+            if (docData.city) {
+                docInfo += `City: ${docData.city}\n`;
+                hasCustomFields = true;
+            }
+            if (docData.pincode) {
+                docInfo += `Pincode: ${docData.pincode}\n`;
+                hasCustomFields = true;
+            }
         }
         
-        return docInfo;
+        return hasCustomFields ? docInfo : null;
         
     } catch (error) {
         console.error(`Error fetching ${docType} details:`, error.message);
@@ -295,7 +307,7 @@ async function getCustomerAddress(customerName) {
         if (addresses && addresses.length > 0) {
             const address = addresses[0];
             
-            let addressText = '?? *Address:*\n';
+            let addressText = '*ADDRESS:*\n';
             
             if (address.address_title) {
                 addressText += `${address.address_title}\n`;
@@ -321,26 +333,26 @@ async function getCustomerAddress(customerName) {
             }
             
             if (address.country) {
-                addressText += `${address.country}`;
+                addressText += `${address.country}\n`;
             }
             
             if (address.phone) {
-                addressText += `\n?? *Phone:* ${address.phone}`;
+                addressText += `*Phone:* ${address.phone}\n`;
             }
             
             if (address.email_id) {
-                addressText += `\n?? *Email:* ${address.email_id}`;
+                addressText += `*Email:* ${address.email_id}`;
             }
             
             return addressText;
             
         } else {
-            return '?? *Address:* Not available in records';
+            return '*ADDRESS:* Not available';
         }
         
     } catch (error) {
         console.error('Error fetching address:', error.response?.data || error.message);
-        return '?? *Address:* Unable to fetch address details';
+        return '*ADDRESS:* Unable to fetch address details';
     }
 }
 
