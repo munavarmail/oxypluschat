@@ -26,6 +26,52 @@ app.get('/webhook', (req, res) => {
     } else {
         res.status(403).send('Verification failed');
     }
+// Debug endpoint to see address/custom document structure
+app.get('/debug-address/:customerName', async (req, res) => {
+    try {
+        const customerName = req.params.customerName;
+        
+        // Get addresses linked to this customer
+        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Address`, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([
+                    ['Dynamic Link', 'link_name', '=', customerName],
+                    ['Dynamic Link', 'link_doctype', '=', 'Customer']
+                ])
+            }
+        });
+        
+        const addresses = response.data.data;
+        let addressDetails = [];
+        
+        // Get full details for each address
+        for (const addr of addresses) {
+            const detailResponse = await axios.get(`${ERPNEXT_URL}/api/resource/Address/${addr.name}`, {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            addressDetails.push(detailResponse.data.data);
+        }
+        
+        res.json({ 
+            status: 'success', 
+            message: `Address documents for ${customerName}`, 
+            addresses: addressDetails,
+            availableFields: addressDetails.length > 0 ? Object.keys(addressDetails[0]) : []
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            status: 'error', 
+            message: 'Could not retrieve address data', 
+            error: error.response?.data || error.message 
+        });
+    }
 });
 
 // Webhook to receive messages
@@ -141,8 +187,11 @@ async function getCustomerByMobile(mobileNumber) {
                         'Content-Type': 'application/json'
                     },
                     params: {
-                        filters: JSON.stringify([['mobile_no', '=', pattern]]),
-                        fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address'])
+                        filters: JSON.stringify([
+                            ['mobile_no', '=', pattern]
+                        ]),
+                        fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile']),
+                        limit: 10
                     }
                 });
                 
@@ -160,10 +209,22 @@ async function getCustomerByMobile(mobileNumber) {
         if (customers && customers.length > 0) {
             const customer = customers[0];
             
+            // Get the mobile number from whatever field it's stored in
+            const displayMobile = customer.mobile_no || customer.phone || customer.mobile || 'N/A';
+            
             // Get detailed address information
             const addressInfo = await getCustomerAddress(customer.customer_primary_address || customer.name);
             
-            return `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
+            // Get custom documents/fields linked to this customer
+            const customDocsInfo = await getCustomDocuments(customer.name);
+            
+            let response = `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${displayMobile}\n\n${addressInfo}`;
+            
+            if (customDocsInfo) {
+                response += `\n\n${customDocsInfo}`;
+            }
+            
+            return response;
             
         } else {
             return `? *Customer Not Found*\n\nNo customer found with mobile number: ${mobileNumber}\n\nPlease check the number and try again.`;
@@ -182,8 +243,116 @@ async function getCustomerByMobile(mobileNumber) {
     }
 }
 
-// Get customer address details
-async function getCustomerAddress(customerName) {
+// Get custom documents/fields linked to customer
+async function getCustomDocuments(customerName) {
+    try {
+        let customInfo = '';
+        
+        // List of custom doctypes that might be linked to customers
+        // Add your custom doctype names here
+        const customDocTypes = [
+            'Address', // Since your custom fields seem to be in Address
+            // Add other custom doctypes if needed
+            // 'Custom Billing Details',
+            // 'Customer Equipment',
+        ];
+        
+        for (const docType of customDocTypes) {
+            try {
+                const customDocsUrl = `${ERPNEXT_URL}/api/resource/${docType}`;
+                
+                const response = await axios.get(customDocsUrl, {
+                    headers: {
+                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                        'Content-Type': 'application/json'
+                    },
+                    params: {
+                        filters: JSON.stringify([
+                            ['Dynamic Link', 'link_name', '=', customerName],
+                            ['Dynamic Link', 'link_doctype', '=', 'Customer']
+                        ]),
+                        limit: 10
+                    }
+                });
+
+                if (response.data.data && response.data.data.length > 0) {
+                    const docs = response.data.data;
+                    
+                    for (const doc of docs) {
+                        // Get full document details
+                        const docDetails = await getDocumentDetails(docType, doc.name);
+                        if (docDetails) {
+                            customInfo += docDetails + '\n';
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log(`Error fetching ${docType}:`, err.message);
+                continue;
+            }
+        }
+        
+        return customInfo || null;
+        
+    } catch (error) {
+        console.error('Error fetching custom documents:', error.message);
+        return null;
+    }
+}
+
+// Get detailed information for a specific document
+async function getDocumentDetails(docType, docName) {
+    try {
+        const docUrl = `${ERPNEXT_URL}/api/resource/${docType}/${docName}`;
+        
+        const response = await axios.get(docUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const docData = response.data.data;
+        
+        if (!docData) return null;
+        
+        // Format the document information
+        let docInfo = `?? *${docData.name || docData.title || docType}:*\n`;
+        
+        // Custom fields to display (add your custom field names here)
+        const customFields = [
+            'custom_bottle_in_hand',
+            'custom_coupon_count', 
+            'custom_cooler_in_hand',
+            'custom_bottle_per_recharge',
+            'custom_bottle_recharge_amount',
+            'postal_code',
+            // Add more custom field names as needed
+        ];
+        
+        // Display custom fields if they exist
+        customFields.forEach(field => {
+            if (docData[field] !== undefined && docData[field] !== null) {
+                const fieldValue = docData[field];
+                const displayName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                docInfo += `${displayName}: ${fieldValue}\n`;
+            }
+        });
+        
+        // If no custom fields found, show some basic info
+        if (!customFields.some(field => docData[field] !== undefined)) {
+            if (docData.address_line1) docInfo += `Address: ${docData.address_line1}\n`;
+            if (docData.city) docInfo += `City: ${docData.city}\n`;
+            if (docData.pincode) docInfo += `Pincode: ${docData.pincode}\n`;
+        }
+        
+        return docInfo;
+        
+    } catch (error) {
+        console.error(`Error fetching ${docType} details:`, error.message);
+        return null;
+    }
+}
     try {
         // Fetch address linked to customer
         const addressUrl = `${ERPNEXT_URL}/api/resource/Address`;
@@ -276,7 +445,37 @@ app.get('/test-erpnext', async (req, res) => {
         res.status(500).json({ 
             status: 'error', 
             message: 'ERPNext connection failed', 
-            error: error.message 
+            error: error.response?.data || error.message,
+            url: ERPNEXT_URL,
+            hasCredentials: !!(ERPNEXT_API_KEY && ERPNEXT_API_SECRET)
+        });
+    }
+});
+
+// Debug endpoint to see customer structure
+app.get('/debug-customer', async (req, res) => {
+    try {
+        // Get first few customers to see the field structure
+        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Customer`, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                limit: 3
+            }
+        });
+        res.json({ 
+            status: 'success', 
+            message: 'Sample customers retrieved', 
+            data: response.data.data,
+            availableFields: Object.keys(response.data.data[0] || {})
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            status: 'error', 
+            message: 'Could not retrieve customer data', 
+            error: error.response?.data || error.message 
         });
     }
 });
