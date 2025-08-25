@@ -78,10 +78,10 @@ async function generateResponse(message) {
     const generalMobile = /^[\+]?[0-9]{8,15}$/;
     
     if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-        return 'Hello! ??\n\nI can help you find customer information.\n\n?? *Send a mobile number* to get customer address\n(Supports Indian, UAE & International formats)\n\n?? Type "help" for more options';
+        return 'Hello! ??\n\nI can help you find customer information.\n\n?? *Send a mobile number* to get customer details\n\n?? Type "help" for more options';
         
     } else if (lowerMessage.includes('help')) {
-        return '?? *Available Commands:*\n\n?? Send mobile number to get customer address:\n   • Indian: 9876543210\n   • UAE: 0566337875\n   • International: +971566337875\n\n?? "hello" - Greeting\n?? "help" - Show this menu\n?? "bye" - End conversation';
+        return '?? *Available Commands:*\n\n?? Send mobile number to get customer details\n   Example: 0502594880\n\n?? "hello" - Greeting\n?? "help" - Show this menu\n?? "bye" - End conversation';
         
     } else if (lowerMessage.includes('bye')) {
         return 'Goodbye! ?? Feel free to message me anytime for customer information.';
@@ -134,7 +134,7 @@ async function getCustomerByMobile(mobileNumber) {
             let response = `? *Customer Found!*\n\n?? *Name:* ${customer.customer_name}\n?? *Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
             
             if (customDocsInfo) {
-                response += `\n\n${customDocsInfo}`;
+                response += `\n${customDocsInfo}`;
             }
             
             return response;
@@ -296,11 +296,33 @@ async function getCustomerAddress(customerName) {
             const address = addresses[0];
             
             let addressText = '?? *Address:*\n';
-            addressText += `${address.address_title ? address.address_title + '\n' : ''}`;
-            addressText += `${address.address_line1 || ''}\n`;
-            addressText += `${address.address_line2 ? address.address_line2 + '\n' : ''}`;
-            addressText += `${address.city || ''}, ${address.state || ''} - ${address.pincode || ''}\n`;
-            addressText += `${address.country || ''}`;
+            
+            if (address.address_title) {
+                addressText += `${address.address_title}\n`;
+            }
+            if (address.address_line1) {
+                addressText += `${address.address_line1}\n`;
+            }
+            if (address.address_line2) {
+                addressText += `${address.address_line2}\n`;
+            }
+            
+            // City, State, Pincode line
+            let locationLine = '';
+            if (address.city) locationLine += address.city;
+            if (address.state) {
+                locationLine += locationLine ? `, ${address.state}` : address.state;
+            }
+            if (address.pincode) {
+                locationLine += locationLine ? ` - ${address.pincode}` : address.pincode;
+            }
+            if (locationLine) {
+                addressText += `${locationLine}\n`;
+            }
+            
+            if (address.country) {
+                addressText += `${address.country}`;
+            }
             
             if (address.phone) {
                 addressText += `\n?? *Phone:* ${address.phone}`;
