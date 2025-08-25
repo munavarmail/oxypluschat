@@ -68,30 +68,49 @@ async function handleIncomingMessage(message, phoneNumberId) {
 async function generateResponse(message) {
     const lowerMessage = message.toLowerCase();
     
-    // Check if message contains a mobile number
-    const mobileRegex = /(\+91|91|0)?[6789]\d{9}/;
+    // Check if message contains a mobile number (Indian or International)
+    const mobileRegex = /(\+?\d{1,4})?[0-9]{8,15}/;
     const mobileMatch = message.match(mobileRegex);
     
+    // More specific patterns for better validation
+    const indianMobile = /(\+91|91|0)?[6789]\d{9}/;
+    const uaeMobile = /(\+971|971|0)?[5][0-9]\d{7}/;
+    const generalMobile = /^[\+]?[0-9]{8,15}$/;
+    
     if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-        return 'Hello! ??\n\nI can help you find customer information.\n\n?? *Send a mobile number* to get customer address\n?? Type "help" for more options';
+        return 'Hello! ??\n\nI can help you find customer information.\n\n?? *Send a mobile number* to get customer address\n(Supports Indian, UAE & International formats)\n\n?? Type "help" for more options';
         
     } else if (lowerMessage.includes('help')) {
-        return '?? *Available Commands:*\n\n?? Send mobile number (e.g., 9876543210) - Get customer address\n?? "hello" - Greeting\n?? "help" - Show this menu\n?? "bye" - End conversation';
+        return '?? *Available Commands:*\n\n?? Send mobile number to get customer address:\n   • Indian: 9876543210\n   • UAE: 0566337875\n   • International: +971566337875\n\n?? "hello" - Greeting\n?? "help" - Show this menu\n?? "bye" - End conversation';
         
     } else if (lowerMessage.includes('bye')) {
         return 'Goodbye! ?? Feel free to message me anytime for customer information.';
         
-    } else if (mobileMatch) {
-        // Extract clean mobile number
+    } else if (mobileMatch && (indianMobile.test(message) || uaeMobile.test(message) || generalMobile.test(message.trim()))) {
+        // Extract and clean mobile number
         let mobileNumber = mobileMatch[0];
-        // Clean the number (remove +91, 91, 0 prefixes)
-        mobileNumber = mobileNumber.replace(/^(\+91|91|0)/, '');
+        
+        // Clean the number based on country patterns
+        if (indianMobile.test(message)) {
+            // Remove +91, 91, 0 prefixes for Indian numbers
+            mobileNumber = mobileNumber.replace(/^(\+91|91|0)/, '');
+        } else if (uaeMobile.test(message)) {
+            // For UAE numbers, keep the format as is or remove country code
+            mobileNumber = mobileNumber.replace(/^(\+971|971)/, '0');
+            // If it doesn't start with 0, add it
+            if (!mobileNumber.startsWith('0')) {
+                mobileNumber = '0' + mobileNumber;
+            }
+        } else {
+            // For other international numbers, clean minimal formatting
+            mobileNumber = mobileNumber.replace(/^\+/, '');
+        }
         
         // Fetch customer info from ERPNext
-        return await getCustomerByMobile(mobileNumber);
+        return await getCustomerByMobile(mobileNumber.trim());
         
     } else {
-        return '? Please send a valid mobile number to get customer address.\n\n*Example:* 9876543210\n\nType "help" for more options.';
+        return '? Please send a valid mobile number to get customer address.\n\n*Supported formats:*\n• Indian: 9876543210\n• UAE: 0566337875\n• International: +971566337875\n\nType "help" for more options.';
     }
 }
 
@@ -101,18 +120,42 @@ async function getCustomerByMobile(mobileNumber) {
         // ERPNext API endpoint to search customers
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
         
-        const response = await axios.get(searchUrl, {
-            headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                'Content-Type': 'application/json'
-            },
-            params: {
-                filters: JSON.stringify([['mobile_no', '=', mobileNumber]]),
-                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address'])
+        // Try multiple search patterns since mobile numbers can be stored differently
+        const searchPatterns = [
+            mobileNumber,                    // As provided
+            `+${mobileNumber}`,             // With + prefix
+            mobileNumber.replace(/^0/, ''), // Remove leading 0
+            `0${mobileNumber}`,             // Add leading 0
+        ];
+        
+        let customers = [];
+        
+        // Try each pattern until we find a match
+        for (const pattern of searchPatterns) {
+            if (customers.length > 0) break; // Stop if we found customers
+            
+            try {
+                const response = await axios.get(searchUrl, {
+                    headers: {
+                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                        'Content-Type': 'application/json'
+                    },
+                    params: {
+                        filters: JSON.stringify([['mobile_no', '=', pattern]]),
+                        fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address'])
+                    }
+                });
+                
+                if (response.data.data && response.data.data.length > 0) {
+                    customers = response.data.data;
+                    console.log(`Found customer with pattern: ${pattern}`);
+                    break;
+                }
+            } catch (err) {
+                console.log(`Search failed for pattern ${pattern}:`, err.message);
+                continue; // Try next pattern
             }
-        });
-
-        const customers = response.data.data;
+        }
         
         if (customers && customers.length > 0) {
             const customer = customers[0];
