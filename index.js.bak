@@ -26,52 +26,6 @@ app.get('/webhook', (req, res) => {
     } else {
         res.status(403).send('Verification failed');
     }
-// Debug endpoint to see address/custom document structure
-app.get('/debug-address/:customerName', async (req, res) => {
-    try {
-        const customerName = req.params.customerName;
-        
-        // Get addresses linked to this customer
-        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Address`, {
-            headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                'Content-Type': 'application/json'
-            },
-            params: {
-                filters: JSON.stringify([
-                    ['Dynamic Link', 'link_name', '=', customerName],
-                    ['Dynamic Link', 'link_doctype', '=', 'Customer']
-                ])
-            }
-        });
-        
-        const addresses = response.data.data;
-        let addressDetails = [];
-        
-        // Get full details for each address
-        for (const addr of addresses) {
-            const detailResponse = await axios.get(`${ERPNEXT_URL}/api/resource/Address/${addr.name}`, {
-                headers: {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            addressDetails.push(detailResponse.data.data);
-        }
-        
-        res.json({ 
-            status: 'success', 
-            message: `Address documents for ${customerName}`, 
-            addresses: addressDetails,
-            availableFields: addressDetails.length > 0 ? Object.keys(addressDetails[0]) : []
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            status: 'error', 
-            message: 'Could not retrieve address data', 
-            error: error.response?.data || error.message 
-        });
-    }
 });
 
 // Webhook to receive messages
@@ -166,7 +120,7 @@ async function getCustomerByMobile(mobileNumber) {
         // ERPNext API endpoint to search customers
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
         
-        // Try multiple search patterns since mobile numbers can be stored differently
+        // Try multiple search patterns and field names since different ERPNext versions use different fields
         const searchPatterns = [
             mobileNumber,                    // As provided
             `+${mobileNumber}`,             // With + prefix
@@ -174,35 +128,42 @@ async function getCustomerByMobile(mobileNumber) {
             `0${mobileNumber}`,             // Add leading 0
         ];
         
+        // Different field names that might be used for mobile numbers
+        const mobileFields = ['mobile_no', 'phone', 'mobile', 'mobile_number'];
+        
         let customers = [];
         
-        // Try each pattern until we find a match
-        for (const pattern of searchPatterns) {
+        // Try each field name with each pattern until we find a match
+        for (const fieldName of mobileFields) {
             if (customers.length > 0) break; // Stop if we found customers
             
-            try {
-                const response = await axios.get(searchUrl, {
-                    headers: {
-                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                        'Content-Type': 'application/json'
-                    },
-                    params: {
-                        filters: JSON.stringify([
-                            ['mobile_no', '=', pattern]
-                        ]),
-                        fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile']),
-                        limit: 10
-                    }
-                });
+            for (const pattern of searchPatterns) {
+                if (customers.length > 0) break; // Stop if we found customers
                 
-                if (response.data.data && response.data.data.length > 0) {
-                    customers = response.data.data;
-                    console.log(`Found customer with pattern: ${pattern}`);
-                    break;
+                try {
+                    const response = await axios.get(searchUrl, {
+                        headers: {
+                            'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                            'Content-Type': 'application/json'
+                        },
+                        params: {
+                            filters: JSON.stringify([
+                                [fieldName, '=', pattern]
+                            ]),
+                            fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile']),
+                            limit: 10
+                        }
+                    });
+                    
+                    if (response.data.data && response.data.data.length > 0) {
+                        customers = response.data.data;
+                        console.log(`Found customer with field ${fieldName} and pattern: ${pattern}`);
+                        break;
+                    }
+                } catch (err) {
+                    console.log(`Search failed for field ${fieldName} with pattern ${pattern}:`, err.response?.status, err.message);
+                    continue; // Try next combination
                 }
-            } catch (err) {
-                console.log(`Search failed for pattern ${pattern}:`, err.message);
-                continue; // Try next pattern
             }
         }
         
@@ -334,7 +295,7 @@ async function getDocumentDetails(docType, docName) {
         customFields.forEach(field => {
             if (docData[field] !== undefined && docData[field] !== null) {
                 const fieldValue = docData[field];
-                const displayName = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const displayName = field.replace(/custom_|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 docInfo += `${displayName}: ${fieldValue}\n`;
             }
         });
@@ -353,6 +314,9 @@ async function getDocumentDetails(docType, docName) {
         return null;
     }
 }
+
+// Get customer address details
+async function getCustomerAddress(customerName) {
     try {
         // Fetch address linked to customer
         const addressUrl = `${ERPNEXT_URL}/api/resource/Address`;
@@ -475,6 +439,54 @@ app.get('/debug-customer', async (req, res) => {
         res.status(500).json({ 
             status: 'error', 
             message: 'Could not retrieve customer data', 
+            error: error.response?.data || error.message 
+        });
+    }
+});
+
+// Debug endpoint to see address/custom document structure
+app.get('/debug-address/:customerName', async (req, res) => {
+    try {
+        const customerName = req.params.customerName;
+        
+        // Get addresses linked to this customer
+        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Address`, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([
+                    ['Dynamic Link', 'link_name', '=', customerName],
+                    ['Dynamic Link', 'link_doctype', '=', 'Customer']
+                ])
+            }
+        });
+        
+        const addresses = response.data.data;
+        let addressDetails = [];
+        
+        // Get full details for each address
+        for (const addr of addresses) {
+            const detailResponse = await axios.get(`${ERPNEXT_URL}/api/resource/Address/${addr.name}`, {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            addressDetails.push(detailResponse.data.data);
+        }
+        
+        res.json({ 
+            status: 'success', 
+            message: `Address documents for ${customerName}`, 
+            addresses: addressDetails,
+            availableFields: addressDetails.length > 0 ? Object.keys(addressDetails[0]) : []
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            status: 'error', 
+            message: 'Could not retrieve address data', 
             error: error.response?.data || error.message 
         });
     }

@@ -133,6 +133,24 @@ async function getCustomerByMobile(mobileNumber) {
         
         let customers = [];
         
+        // First, try a simple search without filters to test basic API access
+        try {
+            console.log('Testing basic API access...');
+            const basicResponse = await axios.get(searchUrl, {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    limit: 1
+                }
+            });
+            console.log('Basic API access works, proceeding with filtered search...');
+        } catch (basicErr) {
+            console.error('Basic API access failed:', basicErr.response?.status, basicErr.message);
+            throw basicErr;
+        }
+
         // Try each field name with each pattern until we find a match
         for (const fieldName of mobileFields) {
             if (customers.length > 0) break; // Stop if we found customers
@@ -141,16 +159,18 @@ async function getCustomerByMobile(mobileNumber) {
                 if (customers.length > 0) break; // Stop if we found customers
                 
                 try {
+                    // Use simpler filter format that works better with some ERPNext versions
+                    const filterArray = [[fieldName, '=', pattern]];
+                    
                     const response = await axios.get(searchUrl, {
                         headers: {
                             'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
                         },
                         params: {
-                            filters: JSON.stringify([
-                                [fieldName, '=', pattern]
-                            ]),
-                            fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile']),
+                            filters: JSON.stringify(filterArray),
+                            fields: '["name","customer_name","mobile_no","customer_primary_address","phone","mobile"]',
                             limit: 10
                         }
                     });
@@ -159,9 +179,37 @@ async function getCustomerByMobile(mobileNumber) {
                         customers = response.data.data;
                         console.log(`Found customer with field ${fieldName} and pattern: ${pattern}`);
                         break;
+                    } else {
+                        console.log(`No results for field ${fieldName} with pattern ${pattern}`);
                     }
                 } catch (err) {
                     console.log(`Search failed for field ${fieldName} with pattern ${pattern}:`, err.response?.status, err.message);
+                    
+                    // Try alternative API method for this pattern
+                    try {
+                        console.log(`Trying alternative method for ${fieldName}: ${pattern}`);
+                        const altResponse = await axios.post(`${ERPNEXT_URL}/api/method/frappe.client.get_list`, {
+                            doctype: 'Customer',
+                            filters: {
+                                [fieldName]: pattern
+                            },
+                            fields: ['name', 'customer_name', 'mobile_no', 'customer_primary_address', 'phone', 'mobile'],
+                            limit_page_length: 10
+                        }, {
+                            headers: {
+                                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (altResponse.data.message && altResponse.data.message.length > 0) {
+                            customers = altResponse.data.message;
+                            console.log(`Found customer using alternative method with ${fieldName}: ${pattern}`);
+                            break;
+                        }
+                    } catch (altErr) {
+                        console.log(`Alternative method also failed for ${fieldName} with ${pattern}:`, altErr.response?.status);
+                    }
                     continue; // Try next combination
                 }
             }
@@ -444,7 +492,127 @@ app.get('/debug-customer', async (req, res) => {
     }
 });
 
-// Debug endpoint to see address/custom document structure
+// Debug endpoint for mobile number search
+app.get('/debug-mobile/:mobileNumber', async (req, res) => {
+    try {
+        const mobileNumber = req.params.mobileNumber;
+        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        
+        // Try different search approaches
+        const approaches = [
+            {
+                name: 'Standard API with mobile_no',
+                method: 'GET',
+                url: searchUrl,
+                params: {
+                    filters: JSON.stringify([['mobile_no', '=', mobileNumber]]),
+                    fields: '["name","customer_name","mobile_no"]',
+                    limit: 5
+                }
+            },
+            {
+                name: 'Alternative frappe.client.get_list',
+                method: 'POST',
+                url: `${ERPNEXT_URL}/api/method/frappe.client.get_list`,
+                data: {
+                    doctype: 'Customer',
+                    filters: { mobile_no: mobileNumber },
+                    fields: ['name', 'customer_name', 'mobile_no'],
+                    limit_page_length: 5
+                }
+            },
+            {
+                name: 'Search with phone field',
+                method: 'GET',
+                url: searchUrl,
+                params: {
+                    filters: JSON.stringify([['phone', '=', mobileNumber]]),
+                    fields: '["name","customer_name","phone"]',
+                    limit: 5
+                }
+            }
+        ];
+        
+        const results = [];
+        
+        for (const approach of approaches) {
+            try {
+                let response;
+                const headers = {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                };
+                
+                if (approach.method === 'GET') {
+                    response = await axios.get(approach.url, {
+                        headers,
+                        params: approach.params
+                    });
+                } else {
+                    response = await axios.post(approach.url, approach.data, { headers });
+                }
+                
+                results.push({
+                    approach: approach.name,
+                    status: 'success',
+                    data: response.data.data || response.data.message || response.data,
+                    count: (response.data.data || response.data.message || []).length
+                });
+                
+            } catch (error) {
+                results.push({
+                    approach: approach.name,
+                    status: 'error',
+                    error: error.response?.status,
+                    message: error.message,
+                    details: error.response?.data
+                });
+            }
+        }
+        
+        res.json({
+            searchTerm: mobileNumber,
+            results: results,
+            summary: `Tested ${approaches.length} different approaches`
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            error: 'Debug search failed',
+            message: error.message
+        });
+    }
+});
+
+// Simple customer list endpoint to test basic API access
+app.get('/debug-simple', async (req, res) => {
+    try {
+        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Customer`, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                limit: 5
+            }
+        });
+        
+        res.json({
+            status: 'success',
+            message: 'Basic customer listing works',
+            customers: response.data.data,
+            availableFields: response.data.data.length > 0 ? Object.keys(response.data.data[0]) : []
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.response?.status || 'Unknown',
+            message: error.message,
+            details: error.response?.data
+        });
+    }
+});
 app.get('/debug-address/:customerName', async (req, res) => {
     try {
         const customerName = req.params.customerName;
