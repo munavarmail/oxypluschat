@@ -81,7 +81,7 @@ async function generateResponse(message) {
         return 'Hello!\n\nI can help you find customer information.\n\n*Send a mobile number* to get customer details\n\nType "help" for more options';
         
     } else if (lowerMessage.includes('help')) {
-        return '*AVAILABLE COMMANDS:*\n\nSend mobile number to get customer details\nExample: 0502594880\n\n"hello" - Greeting\n"help" - Show this menu\n"bye" - End conversation';
+        return '*AVAILABLE COMMANDS:*\n\nSend mobile number to get customer details\nExample: 0502594880';
         
     } else if (lowerMessage.includes('bye')) {
         return 'Goodbye! Feel free to message me anytime for customer information.';
