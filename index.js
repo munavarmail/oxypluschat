@@ -9,10 +9,10 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// ERPNext Configuration
-const ERPNEXT_URL = process.env.ERPNEXT_URL; // e.g., https://your-erpnext-site.com
-const ERPNEXT_API_KEY = process.env.ERPNEXT_API_KEY;
-const ERPNEXT_API_SECRET = process.env.ERPNEXT_API_SECRET;
+// dotorders ERP Configuration
+const dotorders ERP_URL = process.env.dotorders ERP_URL; // e.g., https://your-dotorders ERP-site.com
+const dotorders ERP_API_KEY = process.env.dotorders ERP_API_KEY;
+const dotorders ERP_API_SECRET = process.env.dotorders ERP_API_SECRET;
 
 // Keep-alive configuration
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL; // Set this to your app URL
@@ -141,7 +141,7 @@ async function handleIncomingMessage(message, phoneNumberId) {
     }
 }
 
-// Generate bot responses with ERPNext integration
+// Generate bot responses with dotorders ERP integration
 async function generateResponse(message) {
     const lowerMessage = message.toLowerCase();
     
@@ -169,7 +169,7 @@ async function generateResponse(message) {
         
         console.log(`Processing mobile number: ${mobileNumber}`);
         
-        // Fetch customer info from ERPNext
+        // Fetch customer info from dotorders ERP
         return await getCustomerByMobile(mobileNumber);
         
     } else {
@@ -177,17 +177,17 @@ async function generateResponse(message) {
     }
 }
 
-// Fetch customer information from ERPNext by mobile number
+// Fetch customer information from dotorders ERP by mobile number
 async function getCustomerByMobile(mobileNumber) {
     try {
-        // ERPNext API endpoint to search customers
-        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        // dotorders ERP API endpoint to search customers
+        const searchUrl = `${dotorders ERP_URL}/api/resource/Customer`;
         
         console.log(`Searching for customer with mobile: ${mobileNumber}`);
         
         const response = await axios.get(searchUrl, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -225,11 +225,11 @@ async function getCustomerByMobile(mobileNumber) {
         console.error('Error fetching customer:', error.response?.status, error.response?.data || error.message);
         
         if (error.response?.status === 401) {
-            return 'Authentication failed. Please check ERPNext credentials.';
+            return 'Authentication failed. Please check dotorders ERP credentials.';
         } else if (error.response?.status === 404) {
-            return 'ERPNext server not found. Please check the URL.';
+            return 'dotorders ERP server not found. Please check the URL.';
         } else if (error.response?.status === 417) {
-            return 'ERPNext API request format issue. Please contact support.';
+            return 'dotorders ERP API request format issue. Please contact support.';
         } else {
             return 'Unable to fetch customer information. Please try again later.';
         }
@@ -252,11 +252,11 @@ async function getCustomDocuments(customerName) {
         
         for (const docType of customDocTypes) {
             try {
-                const customDocsUrl = `${ERPNEXT_URL}/api/resource/${docType}`;
+                const customDocsUrl = `${dotorders ERP_URL}/api/resource/${docType}`;
                 
                 const response = await axios.get(customDocsUrl, {
                     headers: {
-                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                        'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                         'Content-Type': 'application/json'
                     },
                     params: {
@@ -296,11 +296,11 @@ async function getCustomDocuments(customerName) {
 // Get detailed information for a specific document
 async function getDocumentDetails(docType, docName) {
     try {
-        const docUrl = `${ERPNEXT_URL}/api/resource/${docType}/${docName}`;
+        const docUrl = `${dotorders ERP_URL}/api/resource/${docType}/${docName}`;
         
         const response = await axios.get(docUrl, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -363,11 +363,11 @@ async function getDocumentDetails(docType, docName) {
 async function getCustomerAddress(customerName) {
     try {
         // Fetch address linked to customer
-        const addressUrl = `${ERPNEXT_URL}/api/resource/Address`;
+        const addressUrl = `${dotorders ERP_URL}/api/resource/Address`;
         
         const response = await axios.get(addressUrl, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -472,7 +472,7 @@ app.get('/', (req, res) => {
         </style>
     </head>
     <body>
-        <h1>?? WhatsApp Bot with ERPNext Integration</h1>
+        <h1>?? WhatsApp Bot with dotorders ERP Integration</h1>
         <div class="status">
             <h2>Server Status: <span class="active">RUNNING</span></h2>
             <p><strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds</p>
@@ -483,7 +483,7 @@ app.get('/', (req, res) => {
         <h3>Available Endpoints:</h3>
         <div class="endpoint"><strong>/health</strong> - Health check</div>
         <div class="endpoint"><strong>/keep-alive-status</strong> - Keep-alive configuration</div>
-        <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
+        <div class="endpoint"><strong>/test-dotorders ERP</strong> - Test dotorders ERP connection</div>
         <div class="endpoint"><strong>/webhook</strong> - WhatsApp webhook</div>
     </body>
     </html>
@@ -491,23 +491,23 @@ app.get('/', (req, res) => {
     res.send(statusHtml);
 });
 
-// Test ERPNext connection endpoint
-app.get('/test-erpnext', async (req, res) => {
+// Test dotorders ERP connection endpoint
+app.get('/test-dotorders ERP', async (req, res) => {
     try {
-        const response = await axios.get(`${ERPNEXT_URL}/api/method/frappe.auth.get_logged_user`, {
+        const response = await axios.get(`${dotorders ERP_URL}/api/method/frappe.auth.get_logged_user`, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             }
         });
-        res.json({ status: 'success', message: 'ERPNext connection working!', data: response.data });
+        res.json({ status: 'success', message: 'dotorders ERP connection working!', data: response.data });
     } catch (error) {
         res.status(500).json({ 
             status: 'error', 
-            message: 'ERPNext connection failed', 
+            message: 'dotorders ERP connection failed', 
             error: error.response?.data || error.message,
-            url: ERPNEXT_URL,
-            hasCredentials: !!(ERPNEXT_API_KEY && ERPNEXT_API_SECRET)
+            url: dotorders ERP_URL,
+            hasCredentials: !!(dotorders ERP_API_KEY && dotorders ERP_API_SECRET)
         });
     }
 });
@@ -516,9 +516,9 @@ app.get('/test-erpnext', async (req, res) => {
 app.get('/debug-customer', async (req, res) => {
     try {
         // Get first few customers to see the field structure
-        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Customer`, {
+        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Customer`, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -544,7 +544,7 @@ app.get('/debug-customer', async (req, res) => {
 app.get('/debug-mobile/:mobileNumber', async (req, res) => {
     try {
         const mobileNumber = req.params.mobileNumber;
-        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        const searchUrl = `${dotorders ERP_URL}/api/resource/Customer`;
         
         // Try different search approaches
         const approaches = [
@@ -561,7 +561,7 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
             {
                 name: 'Alternative frappe.client.get_list',
                 method: 'POST',
-                url: `${ERPNEXT_URL}/api/method/frappe.client.get_list`,
+                url: `${dotorders ERP_URL}/api/method/frappe.client.get_list`,
                 data: {
                     doctype: 'Customer',
                     filters: { mobile_no: mobileNumber },
@@ -587,7 +587,7 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
             try {
                 let response;
                 const headers = {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 };
@@ -636,9 +636,9 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
 // Simple customer list endpoint to test basic API access
 app.get('/debug-simple', async (req, res) => {
     try {
-        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Customer`, {
+        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Customer`, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -667,9 +667,9 @@ app.get('/debug-address/:customerName', async (req, res) => {
         const customerName = req.params.customerName;
         
         // Get addresses linked to this customer
-        const response = await axios.get(`${ERPNEXT_URL}/api/resource/Address`, {
+        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Address`, {
             headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -685,9 +685,9 @@ app.get('/debug-address/:customerName', async (req, res) => {
         
         // Get full details for each address
         for (const addr of addresses) {
-            const detailResponse = await axios.get(`${ERPNEXT_URL}/api/resource/Address/${addr.name}`, {
+            const detailResponse = await axios.get(`${dotorders ERP_URL}/api/resource/Address/${addr.name}`, {
                 headers: {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
                     'Content-Type': 'application/json'
                 }
             });
@@ -712,7 +712,7 @@ app.get('/debug-address/:customerName', async (req, res) => {
 // Start server and keep-alive service
 app.listen(PORT, () => {
     console.log(`?? Server is running on port ${PORT}`);
-    console.log('?? WhatsApp Bot with ERPNext Integration Ready!');
+    console.log('?? WhatsApp Bot with dotorders ERP Integration Ready!');
     console.log(`?? Server URL: http://localhost:${PORT}`);
     
     // Start the keep-alive service

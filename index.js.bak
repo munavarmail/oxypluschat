@@ -14,6 +14,83 @@ const ERPNEXT_URL = process.env.ERPNEXT_URL; // e.g., https://your-erpnext-site.
 const ERPNEXT_API_KEY = process.env.ERPNEXT_API_KEY;
 const ERPNEXT_API_SECRET = process.env.ERPNEXT_API_SECRET;
 
+// Keep-alive configuration
+const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL; // Set this to your app URL
+const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000; // 25 minutes in milliseconds
+
+// Keep-alive function
+async function keepAlive() {
+    if (!KEEP_ALIVE_URL) {
+        console.log('KEEP_ALIVE_URL not set - skipping keep-alive ping');
+        return;
+    }
+    
+    try {
+        const response = await axios.get(`${KEEP_ALIVE_URL}/health`, {
+            timeout: 30000, // 30 second timeout
+            headers: {
+                'User-Agent': 'KeepAlive-Bot/1.0'
+            }
+        });
+        console.log(`? Keep-alive ping successful at ${new Date().toISOString()} - Status: ${response.status}`);
+    } catch (error) {
+        console.error(`? Keep-alive ping failed at ${new Date().toISOString()}:`, error.message);
+    }
+}
+
+// Start keep-alive timer
+function startKeepAlive() {
+    if (!KEEP_ALIVE_URL) {
+        console.log('??  KEEP_ALIVE_URL not configured - server may sleep on free hosting plans');
+        return;
+    }
+    
+    console.log(`?? Starting keep-alive service - pinging every ${KEEP_ALIVE_INTERVAL / 60000} minutes`);
+    console.log(`?? Keep-alive URL: ${KEEP_ALIVE_URL}/health`);
+    
+    // Initial ping after 2 minutes (to let server fully start)
+    setTimeout(keepAlive, 2 * 60 * 1000);
+    
+    // Set up recurring pings
+    setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
+}
+
+// Enhanced health check endpoint
+app.get('/health', (req, res) => {
+    const healthData = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(process.uptime()),
+        memory: process.memoryUsage(),
+        environment: process.env.NODE_ENV || 'development',
+        version: '1.0.0'
+    };
+    
+    console.log(`?? Health check called from ${req.ip} at ${healthData.timestamp}`);
+    res.status(200).json(healthData);
+});
+
+// Keep-alive status endpoint
+app.get('/keep-alive-status', (req, res) => {
+    res.json({
+        keepAliveEnabled: !!KEEP_ALIVE_URL,
+        keepAliveUrl: KEEP_ALIVE_URL || 'Not configured',
+        intervalMinutes: KEEP_ALIVE_INTERVAL / 60000,
+        nextPingEstimate: new Date(Date.now() + KEEP_ALIVE_INTERVAL).toISOString(),
+        serverTime: new Date().toISOString()
+    });
+});
+
+// Manual ping endpoint (for testing)
+app.post('/manual-ping', async (req, res) => {
+    console.log('Manual ping triggered');
+    await keepAlive();
+    res.json({ 
+        message: 'Manual keep-alive ping sent', 
+        timestamp: new Date().toISOString() 
+    });
+});
+
 // Webhook verification
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
@@ -379,9 +456,39 @@ async function sendMessage(to, message, phoneNumberId) {
     }
 }
 
-// Health check endpoint
+// Main homepage endpoint
 app.get('/', (req, res) => {
-    res.send('WhatsApp Bot with ERPNext Integration is running! ??');
+    const statusHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>WhatsApp Bot Status</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            .status { padding: 20px; background: #f0f8f0; border-radius: 8px; }
+            .endpoint { margin: 10px 0; padding: 10px; background: #f8f8f8; border-radius: 4px; }
+            .active { color: green; font-weight: bold; }
+            .inactive { color: orange; }
+        </style>
+    </head>
+    <body>
+        <h1>?? WhatsApp Bot with ERPNext Integration</h1>
+        <div class="status">
+            <h2>Server Status: <span class="active">RUNNING</span></h2>
+            <p><strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds</p>
+            <p><strong>Keep-alive:</strong> <span class="${KEEP_ALIVE_URL ? 'active' : 'inactive'}">${KEEP_ALIVE_URL ? 'ENABLED' : 'DISABLED'}</span></p>
+            <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+        </div>
+        
+        <h3>Available Endpoints:</h3>
+        <div class="endpoint"><strong>/health</strong> - Health check</div>
+        <div class="endpoint"><strong>/keep-alive-status</strong> - Keep-alive configuration</div>
+        <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
+        <div class="endpoint"><strong>/webhook</strong> - WhatsApp webhook</div>
+    </body>
+    </html>
+    `;
+    res.send(statusHtml);
 });
 
 // Test ERPNext connection endpoint
@@ -554,6 +661,7 @@ app.get('/debug-simple', async (req, res) => {
         });
     }
 });
+
 app.get('/debug-address/:customerName', async (req, res) => {
     try {
         const customerName = req.params.customerName;
@@ -601,7 +709,12 @@ app.get('/debug-address/:customerName', async (req, res) => {
     }
 });
 
+// Start server and keep-alive service
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log('WhatsApp Bot with ERPNext Integration Ready! ??');
+    console.log(`?? Server is running on port ${PORT}`);
+    console.log('?? WhatsApp Bot with ERPNext Integration Ready!');
+    console.log(`?? Server URL: http://localhost:${PORT}`);
+    
+    // Start the keep-alive service
+    startKeepAlive();
 });
