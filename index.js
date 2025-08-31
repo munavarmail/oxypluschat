@@ -10,9 +10,9 @@ const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
 // dotorders ERP Configuration
-const dotorders ERP_URL = process.env.dotorders ERP_URL; // e.g., https://your-dotorders ERP-site.com
-const dotorders ERP_API_KEY = process.env.dotorders ERP_API_KEY;
-const dotorders ERP_API_SECRET = process.env.dotorders ERP_API_SECRET;
+const DOTORDERS_ERP_URL = process.env.DOTORDERS_ERP_URL; // e.g., https://your-dotorders-site.com
+const DOTORDERS_ERP_API_KEY = process.env.DOTORDERS_ERP_API_KEY;
+const DOTORDERS_ERP_API_SECRET = process.env.DOTORDERS_ERP_API_SECRET;
 
 // Keep-alive configuration
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL; // Set this to your app URL
@@ -181,13 +181,13 @@ async function generateResponse(message) {
 async function getCustomerByMobile(mobileNumber) {
     try {
         // dotorders ERP API endpoint to search customers
-        const searchUrl = `${dotorders ERP_URL}/api/resource/Customer`;
+        const searchUrl = `${DOTORDERS_ERP_URL}/api/resource/Customer`;
         
         console.log(`Searching for customer with mobile: ${mobileNumber}`);
         
         const response = await axios.get(searchUrl, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -252,11 +252,11 @@ async function getCustomDocuments(customerName) {
         
         for (const docType of customDocTypes) {
             try {
-                const customDocsUrl = `${dotorders ERP_URL}/api/resource/${docType}`;
+                const customDocsUrl = `${DOTORDERS_ERP_URL}/api/resource/${docType}`;
                 
                 const response = await axios.get(customDocsUrl, {
                     headers: {
-                        'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                        'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                         'Content-Type': 'application/json'
                     },
                     params: {
@@ -296,11 +296,11 @@ async function getCustomDocuments(customerName) {
 // Get detailed information for a specific document
 async function getDocumentDetails(docType, docName) {
     try {
-        const docUrl = `${dotorders ERP_URL}/api/resource/${docType}/${docName}`;
+        const docUrl = `${DOTORDERS_ERP_URL}/api/resource/${docType}/${docName}`;
         
         const response = await axios.get(docUrl, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -363,11 +363,11 @@ async function getDocumentDetails(docType, docName) {
 async function getCustomerAddress(customerName) {
     try {
         // Fetch address linked to customer
-        const addressUrl = `${dotorders ERP_URL}/api/resource/Address`;
+        const addressUrl = `${DOTORDERS_ERP_URL}/api/resource/Address`;
         
         const response = await axios.get(addressUrl, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -483,7 +483,7 @@ app.get('/', (req, res) => {
         <h3>Available Endpoints:</h3>
         <div class="endpoint"><strong>/health</strong> - Health check</div>
         <div class="endpoint"><strong>/keep-alive-status</strong> - Keep-alive configuration</div>
-        <div class="endpoint"><strong>/test-dotorders ERP</strong> - Test dotorders ERP connection</div>
+        <div class="endpoint"><strong>/test-dotorders-erp</strong> - Test dotorders ERP connection</div>
         <div class="endpoint"><strong>/webhook</strong> - WhatsApp webhook</div>
     </body>
     </html>
@@ -492,11 +492,11 @@ app.get('/', (req, res) => {
 });
 
 // Test dotorders ERP connection endpoint
-app.get('/test-dotorders ERP', async (req, res) => {
+app.get('/test-dotorders-erp', async (req, res) => {
     try {
-        const response = await axios.get(`${dotorders ERP_URL}/api/method/frappe.auth.get_logged_user`, {
+        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/method/frappe.auth.get_logged_user`, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -506,8 +506,8 @@ app.get('/test-dotorders ERP', async (req, res) => {
             status: 'error', 
             message: 'dotorders ERP connection failed', 
             error: error.response?.data || error.message,
-            url: dotorders ERP_URL,
-            hasCredentials: !!(dotorders ERP_API_KEY && dotorders ERP_API_SECRET)
+            url: DOTORDERS_ERP_URL,
+            hasCredentials: !!(DOTORDERS_ERP_API_KEY && DOTORDERS_ERP_API_SECRET)
         });
     }
 });
@@ -516,9 +516,9 @@ app.get('/test-dotorders ERP', async (req, res) => {
 app.get('/debug-customer', async (req, res) => {
     try {
         // Get first few customers to see the field structure
-        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Customer`, {
+        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Customer`, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -544,7 +544,7 @@ app.get('/debug-customer', async (req, res) => {
 app.get('/debug-mobile/:mobileNumber', async (req, res) => {
     try {
         const mobileNumber = req.params.mobileNumber;
-        const searchUrl = `${dotorders ERP_URL}/api/resource/Customer`;
+        const searchUrl = `${DOTORDERS_ERP_URL}/api/resource/Customer`;
         
         // Try different search approaches
         const approaches = [
@@ -561,7 +561,7 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
             {
                 name: 'Alternative frappe.client.get_list',
                 method: 'POST',
-                url: `${dotorders ERP_URL}/api/method/frappe.client.get_list`,
+                url: `${DOTORDERS_ERP_URL}/api/method/frappe.client.get_list`,
                 data: {
                     doctype: 'Customer',
                     filters: { mobile_no: mobileNumber },
@@ -587,7 +587,7 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
             try {
                 let response;
                 const headers = {
-                    'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 };
@@ -636,9 +636,9 @@ app.get('/debug-mobile/:mobileNumber', async (req, res) => {
 // Simple customer list endpoint to test basic API access
 app.get('/debug-simple', async (req, res) => {
     try {
-        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Customer`, {
+        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Customer`, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -667,9 +667,9 @@ app.get('/debug-address/:customerName', async (req, res) => {
         const customerName = req.params.customerName;
         
         // Get addresses linked to this customer
-        const response = await axios.get(`${dotorders ERP_URL}/api/resource/Address`, {
+        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Address`, {
             headers: {
-                'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -685,9 +685,9 @@ app.get('/debug-address/:customerName', async (req, res) => {
         
         // Get full details for each address
         for (const addr of addresses) {
-            const detailResponse = await axios.get(`${dotorders ERP_URL}/api/resource/Address/${addr.name}`, {
+            const detailResponse = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Address/${addr.name}`, {
                 headers: {
-                    'Authorization': `token ${dotorders ERP_API_KEY}:${dotorders ERP_API_SECRET}`,
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
                     'Content-Type': 'application/json'
                 }
             });
