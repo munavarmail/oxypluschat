@@ -4,8 +4,8 @@
   "description": "Oxyplus chatbot using Meta Business API",
   "main": "server.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
