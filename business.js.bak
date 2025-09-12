@@ -68,7 +68,7 @@ A coupon = one bottle. Give coupons to delivery person = get bottles!
 *AMAZING BENEFITS:*
 • ?? No bottle deposit (save AED 15/bottle)
 • ? Priority delivery
-• ?? Out-of-schedule delivery possible
+• ? Out-of-schedule delivery possible
 • ?? FREE delivery charges
 • ?? No cash payment hassle
 • ?? Better price per bottle (as low as AED 5!)
@@ -99,7 +99,7 @@ Ready to get started with coupons?`
 • Smart routing for fastest delivery
 
 *DELIVERY CHARGES:*
-• ?? FREE with coupon books
+• FREE with coupon books
 • Standard charges for individual bottles
 
 *DELIVERY PROMISE:*
@@ -260,7 +260,7 @@ async function generateNLPEnhancedResponse(message, session, userPhone) {
     }
 }
 
-// Handle state-based responses (NEW IMPROVED VERSION)
+// Handle state-based responses (FIXED DELIVERY SCHEDULING)
 async function handleStateBasedResponse(message, session, userPhone) {
     const confirmation = isConfirmation(message);
     
@@ -317,7 +317,6 @@ What are your delivery details?`;
             return await handleComplaintFollowup(message, session, userPhone);
             
         case 'awaiting_product_selection':
-            // User is selecting from product options
             return await handleProductSelection(message, session, userPhone);
     }
     
@@ -326,7 +325,6 @@ What are your delivery details?`;
 
 // Handle delivery scheduling
 async function handleDeliveryScheduling(message, session, userPhone) {
-    // Extract delivery information from message
     const deliveryInfo = {
         address: message,
         timestamp: new Date().toISOString(),
@@ -447,7 +445,6 @@ async function handleNLPOrder(entities, session, userPhone) {
             const orderCommand = `order ${quantity > 1 ? quantity + ' ' : ''}${productKey.replace('_', ' ')}`;
             return await handleOrderCommand(orderCommand, session, userPhone);
         } else {
-            // Product not found - show options
             session.state = 'awaiting_product_selection';
             session.lastBotAction = 'product_options_shown';
             return `I understand you're looking for "${requestedProduct}". 
@@ -479,7 +476,6 @@ What would work best for you?`;
 async function handleProductSelection(message, session, userPhone) {
     const lowerMessage = message.toLowerCase();
     
-    // Try to match product from message
     let selectedProductKey = null;
     let selectedProduct = null;
     
@@ -500,7 +496,6 @@ async function handleProductSelection(message, session, userPhone) {
         const orderCommand = `order ${selectedProductKey.replace('_', ' ')}`;
         return await handleOrderCommand(orderCommand, session, userPhone);
     } else {
-        // Still not clear - ask again
         return `I'm not sure which product you're referring to. Could you be more specific?
 
 *Available products:*
@@ -642,7 +637,7 @@ async function handleComplaintFollowup(message, session, userPhone) {
 • Reference: #CMP${Date.now().toString().slice(-6)}
 
 *NEXT STEPS:*
-1. ????? Management team notified
+1. ?? Management team notified
 2. ?? We'll call you within 2 hours  
 3. ?? Resolution team assigned
 4. ?? Follow-up confirmation sent
@@ -719,7 +714,6 @@ What specific information do you need?`;
 async function handleOrderCommand(message, session, userPhone) {
     const orderText = message.substring(6).toLowerCase().trim(); // Remove "order "
     
-    // Find matching product
     let selectedProduct = null;
     let productKey = null;
     
