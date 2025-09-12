@@ -31,7 +31,7 @@ I'm your smart assistant and can help you with:
 
 Just talk to me naturally - I understand context and conversation!
 
-Try: "I need water for my office" or "What's your cheapest option?"`
+Try: "I need 5 bottles for my office" or "What's your cheapest option?"`
     },
     
     menu: {
@@ -158,6 +158,37 @@ Would you like to order any equipment?`
 // Conversation state management
 const userSessions = new Map();
 
+// Extract quantity from text
+function extractQuantity(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Number patterns
+    const numberWords = {
+        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+        'eleven': 11, 'twelve': 12, 'fifteen': 15, 'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50
+    };
+    
+    // Check for written numbers
+    for (const [word, num] of Object.entries(numberWords)) {
+        if (lowerText.includes(word)) {
+            return num;
+        }
+    }
+    
+    // Check for digit patterns
+    const digitMatch = text.match(/\b(\d+)\b/);
+    if (digitMatch) {
+        const quantity = parseInt(digitMatch[1]);
+        // Reasonable limits for orders
+        if (quantity >= 1 && quantity <= 100) {
+            return quantity;
+        }
+    }
+    
+    // Default to 1 if no quantity found
+    return 1;
+}
+
 // Main message handler
 async function handleMessage(userPhone, messageBody) {
     const lowerMessage = messageBody.toLowerCase().trim();
@@ -171,7 +202,7 @@ async function handleMessage(userPhone, messageBody) {
             lastActivity: Date.now(),
             conversationHistory: [],
             nlpContext: {},
-            lastBotAction: null // Track what the bot last asked for
+            lastBotAction: null
         });
     }
     
@@ -384,7 +415,7 @@ I'm your intelligent assistant and can understand natural language. I can help y
 
 *How can I assist you today?*
 
-Try saying: "I need water for my office" or "What's the cheapest option?"`;
+Try saying: "I need 5 bottles for my office" or "What's the cheapest option?"`;
 
         case 'order':
             return await handleNLPOrder(entities, session, userPhone);
@@ -429,14 +460,21 @@ Try saying: "I need water for my office" or "What's the cheapest option?"`;
     return null;
 }
 
-// Enhanced order handling with NLP entities
+// Enhanced order handling with NLP entities and quantity parsing
 async function handleNLPOrder(entities, session, userPhone) {
     if (entities.products.length > 0) {
         const requestedProduct = entities.products[0];
         let quantity = 1;
         
+        // Get quantity from NLP entities first
         if (entities.quantities.length > 0) {
             quantity = entities.quantities[0].number;
+        } else {
+            // Fallback to text extraction if NLP didn't find quantity
+            const originalMessage = session.conversationHistory[session.conversationHistory.length - 1]?.message;
+            if (originalMessage) {
+                quantity = extractQuantity(originalMessage);
+            }
         }
         
         let productKey = mapProductToKey(requestedProduct);
@@ -447,7 +485,8 @@ async function handleNLPOrder(entities, session, userPhone) {
         } else {
             session.state = 'awaiting_product_selection';
             session.lastBotAction = 'product_options_shown';
-            return `I understand you're looking for "${requestedProduct}". 
+            session.tempQuantity = quantity; // Store quantity for later use
+            return `I understand you're looking for ${quantity > 1 ? quantity + ' ' : ''}"${requestedProduct}". 
 
 Here are our available products:
 ${Object.entries(PRODUCTS).map(([key, product]) => 
@@ -493,8 +532,8 @@ async function handleProductSelection(message, session, userPhone) {
     }
     
     if (selectedProduct) {
-        // Use stored quantity if available, otherwise default to 1
-        const quantity = session.tempQuantity || 1;
+        // Use stored quantity if available, otherwise extract from current message
+        const quantity = session.tempQuantity || extractQuantity(message);
         const orderCommand = `order ${quantity > 1 ? quantity + ' ' : ''}${selectedProductKey.replace('_', ' ')}`;
         // Clear temp quantity
         delete session.tempQuantity;
@@ -565,7 +604,7 @@ async function handleHelpRequest(session, entities) {
     if (session.orderInProgress) {
         return `I see you have an order in progress! ??
 
-*Current Order:* ${session.orderInProgress.product.name}
+*Current Order:* ${session.orderInProgress.quantity}x ${session.orderInProgress.product.name}
 *Status:* ${session.state}
 
 *I can help with:*
@@ -582,7 +621,7 @@ async function handleHelpRequest(session, entities) {
 
 *? POPULAR ACTIONS:*
 • "Show menu" - Browse all products
-• "Order water" - Smart ordering assistant
+• "Order 5 bottles" - Smart ordering with quantity
 • "Delivery to [area]" - Area-specific info
 • Send mobile number - Instant account lookup
 
@@ -691,12 +730,12 @@ async function generateEnhancedResponse(message, session, userPhone) {
         return `*HOW I CAN HELP* ??
 
 ${nlpStatus.nlpAvailable ? '• Talk to me naturally - I understand context!' : '• Type "menu" - See all products'}
-• Type "order [product]" - Place an order
+• Type "order [quantity] [product]" - Place an order
 • Send mobile number - Get customer details
 • Ask about delivery, pricing, coupons
 
 *Example queries:*
-${nlpStatus.nlpAvailable ? '• "I need water for 20 people"\n• "What\'s the most economical option?"\n• "Can you deliver to Marina tomorrow?"' : '• "order single bottle"\n• "order coupon book"\n• "order dispenser"'}
+${nlpStatus.nlpAvailable ? '• "I need 5 bottles for 20 people"\n• "What\'s the most economical option?"\n• "Can you deliver 10 bottles to Marina tomorrow?"' : '• "order 3 single bottle"\n• "order 2 coupon book"\n• "order 1 dispenser"'}
 
 What would you like to do?`;
     }
@@ -704,19 +743,23 @@ What would you like to do?`;
     return `I understand you're asking about: "${message}"
 
 I can help you with:
-- Product orders - Just tell me what you need naturally
+- Product orders with quantities - Tell me what you need naturally
 - Product information - Type "menu"
 - Delivery information - Ask about delivery
 - Payment options - Ask about payment
 
 *Just talk to me in your own words - I understand natural language!*
+Example: "I need 5 bottles for my office"
 
 What specific information do you need?`;
 }
 
-// Handle order commands
+// Handle order commands with proper quantity extraction
 async function handleOrderCommand(message, session, userPhone) {
     const orderText = message.substring(6).toLowerCase().trim(); // Remove "order "
+    
+    // Extract quantity from order text
+    const quantity = extractQuantity(orderText);
     
     let selectedProduct = null;
     let productKey = null;
@@ -736,6 +779,7 @@ async function handleOrderCommand(message, session, userPhone) {
     if (!selectedProduct) {
         session.state = 'awaiting_product_selection';
         session.lastBotAction = 'product_options_shown';
+        session.tempQuantity = quantity; // Store quantity for later use
         return `*PRODUCT NOT FOUND*
 
 Available products:
@@ -743,17 +787,18 @@ ${Object.entries(PRODUCTS).map(([key, product]) =>
     `• ${product.name} - AED ${product.price}${product.deposit > 0 ? ` (+${product.deposit} deposit)` : ''}`
 ).join('\n')}
 
-*Example:* "order single bottle"`;
+*Example:* "order 5 single bottle"
+*Or try:* "I need ${quantity > 1 ? quantity + ' ' : ''}water bottles"`;
     }
     
     // Get customer info first
     const customerInfo = await getCustomerByMobile(userPhone);
     
-    // Start order process
+    // Start order process with proper quantity
     session.orderInProgress = {
         product: selectedProduct,
         productKey: productKey,
-        quantity: 1,
+        quantity: quantity, // Now uses extracted quantity instead of hardcoded 1
         customerPhone: userPhone,
         customerInfo: customerInfo
     };
@@ -762,10 +807,14 @@ ${Object.entries(PRODUCTS).map(([key, product]) =>
     if (customerInfo.includes('CUSTOMER NOT FOUND') || !customerInfo.includes('ADDRESS:')) {
         session.state = 'collecting_address';
         session.lastBotAction = 'address_request';
+        
+        const total = (selectedProduct.price + selectedProduct.deposit) * quantity;
+        
         return `*ORDER STARTED*
 
-Product: ${selectedProduct.name}
-Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` (+${selectedProduct.deposit} deposit)` : ''}
+Product: ${quantity}x ${selectedProduct.name}
+Unit Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` (+${selectedProduct.deposit} deposit)` : ''}
+Total: AED ${total}
 
 *Please provide your delivery address:*
 Include building name, area, and any specific directions.`;
@@ -776,17 +825,25 @@ Include building name, area, and any specific directions.`;
     }
 }
 
-// Generate order confirmation
+// Generate order confirmation with proper quantity calculations
 async function generateOrderConfirmation(orderInfo) {
-    const total = orderInfo.product.price + orderInfo.product.deposit;
+    const unitPrice = orderInfo.product.price;
+    const unitDeposit = orderInfo.product.deposit;
+    const quantity = orderInfo.quantity;
+    const totalPrice = unitPrice * quantity;
+    const totalDeposit = unitDeposit * quantity;
+    const grandTotal = totalPrice + totalDeposit;
     
     return `*ORDER CONFIRMATION*
 
-*Product:* ${orderInfo.product.name}
+*Product:* ${quantity}x ${orderInfo.product.name}
 *Description:* ${orderInfo.product.description}
-*Price:* AED ${orderInfo.product.price}
-${orderInfo.product.deposit > 0 ? `*Deposit:* AED ${orderInfo.product.deposit}` : ''}
-*Total:* AED ${total}
+*Unit Price:* AED ${unitPrice}
+${unitDeposit > 0 ? `*Unit Deposit:* AED ${unitDeposit}` : ''}
+*Quantity:* ${quantity}
+*Total Price:* AED ${totalPrice}
+${totalDeposit > 0 ? `*Total Deposit:* AED ${totalDeposit}` : ''}
+*Grand Total:* AED ${grandTotal}
 
 *Delivery Address:*
 ${orderInfo.address || 'Using address on file'}
@@ -837,6 +894,7 @@ function getUserSessions() {
         phone: phone.substring(0, 8) + '****',
         state: session.state,
         hasOrder: !!session.orderInProgress,
+        orderQuantity: session.orderInProgress?.quantity || null,
         conversationLength: session.conversationHistory?.length || 0,
         lastActivity: new Date(session.lastActivity).toISOString(),
         nlpContext: session.nlpContext?.lastIntent || null,
@@ -870,5 +928,6 @@ module.exports = {
     KNOWLEDGE_BASE,
     handleOrderCommand,
     generateOrderConfirmation,
-    processOrder
+    processOrder,
+    extractQuantity
 };

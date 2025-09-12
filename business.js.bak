@@ -493,7 +493,11 @@ async function handleProductSelection(message, session, userPhone) {
     }
     
     if (selectedProduct) {
-        const orderCommand = `order ${selectedProductKey.replace('_', ' ')}`;
+        // Use stored quantity if available, otherwise default to 1
+        const quantity = session.tempQuantity || 1;
+        const orderCommand = `order ${quantity > 1 ? quantity + ' ' : ''}${selectedProductKey.replace('_', ' ')}`;
+        // Clear temp quantity
+        delete session.tempQuantity;
         return await handleOrderCommand(orderCommand, session, userPhone);
     } else {
         return `I'm not sure which product you're referring to. Could you be more specific?

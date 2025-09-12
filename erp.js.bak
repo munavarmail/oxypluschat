@@ -61,7 +61,7 @@ ${addressInfo}`;
             }
             
             response += `\n*?? QUICK ACTIONS:*
-• "Order 5 bottles" - Natural language ordering with quantity
+• "Order water" - Natural language ordering
 • "Delivery schedule" - Check delivery info
 • "Account update" - Update details
 
@@ -75,8 +75,7 @@ What would you like to do?`;
 
 No customer found with mobile number: ${mobileNumber}
 
-Would you like to place a new order? I can help you get started!
-Try: "I need 5 bottles for my office"`;
+Would you like to place a new order? I can help you get started!`;
         }
         
     } catch (error) {
@@ -363,11 +362,9 @@ async function createCustomerAddress(customerName, orderInfo) {
     }
 }
 
-// Create order in ERPNext with proper quantity handling
+// Create order in ERPNext
 async function createERPOrder(orderInfo, customerName) {
     try {
-        const quantity = orderInfo.quantity || 1; // Ensure we have a quantity
-        
         const orderData = {
             doctype: 'Sales Order',
             customer: customerName,
@@ -376,31 +373,27 @@ async function createERPOrder(orderInfo, customerName) {
             items: [{
                 item_code: '5 Gallon Filled', // All products map to this single registered item
                 item_name: orderInfo.product.name,
-                description: `${orderInfo.product.description} (Quantity: ${quantity})`,
-                qty: quantity, // Use the actual quantity from orderInfo
+                description: orderInfo.product.description,
+                qty: orderInfo.quantity,
                 rate: orderInfo.product.price,
-                amount: orderInfo.product.price * quantity // Calculate total amount
+                amount: orderInfo.product.price * orderInfo.quantity
             }],
             custom_delivery_address: orderInfo.address,
             custom_customer_phone: orderInfo.customerPhone,
-            custom_order_source: 'WhatsApp AI Bot',
-            custom_order_quantity: quantity // Store quantity in custom field for reference
+            custom_order_source: 'WhatsApp AI Bot'
         };
         
-        // If there's a deposit, add it as a separate line item with proper quantity
+        // If there's a deposit, add it as a separate line item
         if (orderInfo.product.deposit > 0) {
             orderData.items.push({
                 item_code: '5 Gallon Filled', // Use same item code for deposit
                 item_name: 'Bottle Deposit',
-                description: `Refundable bottle deposit for ${quantity} bottle(s)`,
-                qty: quantity, // Apply deposit for each bottle
+                description: 'Refundable bottle deposit',
+                qty: orderInfo.quantity,
                 rate: orderInfo.product.deposit,
-                amount: orderInfo.product.deposit * quantity // Calculate total deposit amount
+                amount: orderInfo.product.deposit * orderInfo.quantity
             });
         }
-        
-        console.log(`Creating ERP order with quantity: ${quantity}`);
-        console.log(`Order items:`, JSON.stringify(orderData.items, null, 2));
         
         const response = await axios.post(
             `${DOTORDERS_ERP_URL}/api/resource/Sales Order`,
@@ -412,8 +405,6 @@ async function createERPOrder(orderInfo, customerName) {
                 }
             }
         );
-        
-        console.log(`ERP order created successfully: ${response.data.data.name}`);
         
         return {
             success: true,
@@ -460,12 +451,9 @@ async function createERPOrder(orderInfo, customerName) {
     }
 }
 
-// Main function to create an order (used by business logic) with quantity support
+// Main function to create an order (used by business logic)
 async function createOrder(orderInfo) {
     try {
-        const quantity = orderInfo.quantity || 1;
-        console.log(`Processing order for ${quantity} ${orderInfo.product.name}(s)`);
-        
         // First, ensure customer exists in ERP
         const customerResult = await ensureCustomerExists(orderInfo);
         
@@ -476,26 +464,18 @@ async function createOrder(orderInfo) {
             };
         }
         
-        // Create order in ERPNext with proper quantity
+        // Create order in ERPNext
         const erpOrder = await createERPOrder(orderInfo, customerResult.customerName);
         
         if (erpOrder.success) {
-            const totalPrice = orderInfo.product.price * quantity;
-            const totalDeposit = orderInfo.product.deposit * quantity;
-            const grandTotal = totalPrice + totalDeposit;
-            
             return {
                 success: true,
                 orderName: erpOrder.orderName,
                 message: `*ORDER CONFIRMED* ?
 
 *Order ID:* ${erpOrder.orderName}
-*Product:* ${quantity}x ${orderInfo.product.name}
-*Unit Price:* AED ${orderInfo.product.price}${orderInfo.product.deposit > 0 ? ` (+${orderInfo.product.deposit} deposit)` : ''}
-*Quantity:* ${quantity}
-*Total Price:* AED ${totalPrice}
-${totalDeposit > 0 ? `*Total Deposit:* AED ${totalDeposit}` : ''}
-*Grand Total:* AED ${grandTotal}
+*Product:* ${orderInfo.product.name}
+*Total:* AED ${orderInfo.product.price + orderInfo.product.deposit}
 
 *Next Steps:*
 Our delivery team will contact you within 2 hours to schedule delivery.
