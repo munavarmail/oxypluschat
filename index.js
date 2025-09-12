@@ -4,6 +4,20 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
+// Try to import node-nlp, fallback to basic functionality if not available
+let NlpManager = null;
+let nlpAvailable = false;
+
+try {
+    const nodeNlp = require('node-nlp');
+    NlpManager = nodeNlp.NlpManager;
+    nlpAvailable = true;
+    console.log('? NLP module loaded successfully');
+} catch (error) {
+    console.log('?? NLP module not available, running in basic mode');
+    console.log('To enable NLP: npm install node-nlp');
+}
+
 const PORT = process.env.PORT || 3000;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
@@ -18,8 +32,26 @@ const DOTORDERS_ERP_API_SECRET = process.env.DOTORDERS_ERP_API_SECRET;
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL;
 const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000;
 
+// NLP Configuration
+const NLP_CONFIDENCE_THRESHOLD = parseFloat(process.env.NLP_CONFIDENCE_THRESHOLD) || 0.6;
+const ENABLE_NLP_ANALYTICS = process.env.ENABLE_NLP_ANALYTICS === 'true';
+
 // Conversation state management
 const userSessions = new Map();
+
+// NLP System
+let nlpProcessor = null;
+let nlpReady = false;
+
+// NLP Analytics
+let nlpAnalytics = {
+    totalQueries: 0,
+    intentDistribution: {},
+    averageConfidence: 0,
+    responseTime: [],
+    errors: 0,
+    fallbacksUsed: 0
+};
 
 // Product catalog
 const PRODUCTS = {
@@ -33,26 +65,28 @@ const PRODUCTS = {
     'premium_package': { name: '140 Bottles + Dispenser', price: 920, deposit: 0, description: '140 bottles + Premium dispenser package' }
 };
 
-// Customer service knowledge base
+// Enhanced Customer service knowledge base
 const KNOWLEDGE_BASE = {
     greetings: {
         keywords: ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
-        response: `Hello! Welcome to our water delivery service!
+        response: `Hello! Welcome to our AI-powered water delivery service! ??
 
-I can help you with:
-- Product information & pricing
-- Place orders
-- Delivery scheduling
-- Answer your questions
+I'm your smart assistant and can help you with:
+• ?? Product information & pricing
+• ?? Intelligent order placement
+• ?? Delivery scheduling
+• ? Natural language questions
 
 *How can I assist you today?*
 
-Type "menu" to see our products or ask me anything!`
+${nlpAvailable ? 'Just talk to me naturally - I understand context and conversation!' : 'Type "menu" to see products or ask me anything!'}
+
+Try: "I need water for my office" or "What's your cheapest option?"`
     },
     
     menu: {
         keywords: ['menu', 'products', 'catalog', 'price list', 'what do you sell'],
-        response: `*OUR PRODUCTS & SERVICES*
+        response: `*OUR PRODUCTS & SERVICES* ??
 
 *WATER BOTTLES*
 • Single Bottle - AED 7 (+15 deposit)
@@ -63,7 +97,7 @@ Type "menu" to see our products or ask me anything!`
 • Hand Pump - AED 15
 • Premium Water Cooler - AED 300 (1-year warranty)
 
-*COUPON BOOKS*
+*COUPON BOOKS* (Best Value!)
 • 10+1 Coupon Book - AED 70 (no deposit for 3 bottles)
 • 100+40 Coupon Book - AED 700 (no deposit for 5 bottles, BNPL available)
 • 140 Bottles + Dispenser Package - AED 920
@@ -71,78 +105,86 @@ Type "menu" to see our products or ask me anything!`
 *DELIVERY AREAS*
 Dubai, Sharjah, Ajman (except freezones)
 
-Type "order [product]" to place an order
-Example: "order single bottle"`
+${nlpAvailable ? '*Tell me what you need in your own words!*\nExample: "I need 5 bottles for home delivery"' : 'Type "order [product]" to place an order\nExample: "order single bottle"'}`
     },
 
     coupon_info: {
         keywords: ['coupon', 'coupon book', 'what is coupon', 'benefits', 'bnpl', 'buy now pay later'],
-        response: `*COUPON BOOK SYSTEM*
+        response: `*COUPON BOOK SYSTEM* ??
 
-A coupon represents one bottle. Give coupons to delivery person = get bottles!
+A coupon = one bottle. Give coupons to delivery person = get bottles!
 
-*BENEFITS:*
-• No bottle deposit (save AED 15/bottle)
-• Prioritized delivery
-• Out-of-schedule delivery possible
-• No delivery charges
-• No cash payment hassle
-• Better price per bottle
+*AMAZING BENEFITS:*
+• ?? No bottle deposit (save AED 15/bottle)
+• ? Priority delivery
+• ?? Out-of-schedule delivery possible
+• ?? FREE delivery charges
+• ?? No cash payment hassle
+• ?? Better price per bottle (as low as AED 5!)
 
 *AVAILABLE BOOKS:*
 • 10+1 Book (AED 70) - up to 3 bottles without deposit
 • 100+40 Book (AED 700) - up to 5 bottles without deposit
 
-*BUY NOW PAY LATER:*
+*?? BUY NOW PAY LATER:*
 Available ONLY for 100+40 Coupon Book
 
-Would you like to order a coupon book?`
+Ready to get started with coupons?`
     },
 
     delivery: {
         keywords: ['delivery', 'schedule', 'when', 'how long', 'timing', 'areas'],
-        response: `*DELIVERY INFORMATION*
+        response: `*DELIVERY INFORMATION* ??
 
 *COVERAGE AREAS:*
-Dubai, Sharjah, Ajman (except freezones)
+? Dubai - Full coverage (except JAFZA & Airport Freezone)
+? Sharjah - Complete emirate coverage
+? Ajman - All areas served
 
-*SCHEDULING:*
-• Message us on WhatsApp for delivery
-• We'll set a weekly scheduled day
-• Urgent/out-of-schedule requests accommodated
+*SMART SCHEDULING:*
+• Message us for delivery requests
+• We'll set up your weekly schedule
+• Urgent/out-of-schedule requests welcome
+• Smart routing for fastest delivery
 
 *DELIVERY CHARGES:*
-• FREE with coupon books
+• ?? FREE with coupon books
 • Standard charges for individual bottles
 
-*TO SCHEDULE:*
-Just tell me what you need and your location!
+*DELIVERY PROMISE:*
+• Same-day delivery possible
+• SMS/WhatsApp delivery confirmations
+• Professional, uniformed delivery team
 
-Would you like to place an order now?`
+Ready to schedule your delivery?`
     },
 
     payment: {
         keywords: ['payment', 'pay', 'cash', 'card', 'bank transfer', 'installment'],
-        response: `*PAYMENT METHODS*
+        response: `*PAYMENT METHODS* ??
 
-We accept:
-• Cash
-• Card payment (subject to availability)
-• Bank transfer
+*WE ACCEPT:*
+• ?? Cash on delivery
+• ?? Card payment (subject to availability)
+• ?? Bank transfer
+• ?? Digital payments
 
-*INSTALLMENT OPTIONS:*
-Buy Now Pay Later available ONLY for 100+40 Coupon Book
+*?? SPECIAL OFFERS:*
+• Buy Now Pay Later - Available for 100+40 Coupon Book only
+• Bulk discounts for large orders
+• Corporate payment plans available
 
-*PRICING:*
+*TRANSPARENT PRICING:*
 • Base price: AED 7/bottle
 • With coupon books: As low as AED 5/bottle
+• No hidden charges - what you see is what you pay
 
 Ready to place an order?`
     },
 
     equipment: {
         keywords: ['dispenser', 'cooler', 'equipment', 'table top', 'hand pump', 'warranty'],
-        response: `*EQUIPMENT AVAILABLE*
+        response: `*EQUIPMENT AVAILABLE* ???
 
 *DISPENSERS:*
 • Table Top Dispenser - AED 25
@@ -161,6 +203,318 @@ We believe in transparent pricing instead of hiding costs in bottle prices like 
 Would you like to order any equipment?`
     }
 };
+
+// NLP Processor Class (Built-in)
+class WaterDeliveryNLP {
+    constructor() {
+        if (!nlpAvailable) {
+            this.ready = false;
+            return;
+        }
+
+        this.manager = new NlpManager({ 
+            languages: ['en'], 
+            forceNER: true,
+            nlu: { useNoneFeature: true }
+        });
+        this.isTrained = false;
+        this.setupTrainingData();
+    }
+
+    setupTrainingData() {
+        if (!nlpAvailable) return;
+
+        // GREETING INTENT
+        const greetings = [
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+            'salaam', 'salam', 'hi there', 'hey there', 'greetings', 'howdy',
+            'what\'s up', 'yo', 'morning', 'evening', 'afternoon'
+        ];
+        greetings.forEach(greeting => {
+            this.manager.addDocument('en', greeting, 'greeting');
+        });
+
+        // ORDER INTENT - Comprehensive patterns
+        const orderPhrases = [
+            'I want to order %product%', 'I need %product%', 'Can I buy %product%',
+            'I would like to purchase %product%', 'Order %product%', 'Get me %product%',
+            'I want %quantity% %product%', 'Buy %product%', 'I need %quantity% bottles',
+            'Order water', 'I want water delivery', 'Book water bottles',
+            'Can I get water', 'I need water for office', 'Water delivery please',
+            'I want to buy water', 'Need water supply', 'Water bottles needed',
+            'Order bottles for home', 'Get water delivered', 'office water supply',
+            'home water delivery', 'bulk water order', 'emergency water needed'
+        ];
+        orderPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'order');
+        });
+
+        // MENU INQUIRY INTENT
+        const menuPhrases = [
+            'show menu', 'what products', 'price list', 'what do you sell',
+            'show products', 'what items', 'catalog', 'available products',
+            'what can I buy', 'product list', 'services', 'offerings',
+            'what are your prices', 'cost of products', 'pricing',
+            'show me options', 'what do you have', 'menu please',
+            'product catalog', 'what\'s available', 'options available',
+            'cheapest option', 'best deal', 'most economical'
+        ];
+        menuPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'menu');
+        });
+
+        // DELIVERY INTENT
+        const deliveryPhrases = [
+            'delivery information', 'when can you deliver', 'delivery areas',
+            'do you deliver to %location%', 'delivery schedule', 'how long delivery',
+            'when will it arrive', 'delivery time', 'shipping info',
+            'can you deliver', 'delivery charges', 'delivery fee',
+            'delivery cost', 'shipping cost', 'delivery timing',
+            'where do you deliver', 'delivery zones', 'same day delivery',
+            'next day delivery', 'urgent delivery', 'fast delivery',
+            'delivery to dubai', 'delivery to sharjah', 'delivery to ajman'
+        ];
+        deliveryPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'delivery');
+        });
+
+        // PAYMENT INTENT
+        const paymentPhrases = [
+            'payment methods', 'how to pay', 'payment options', 'cash payment',
+            'card payment', 'bank transfer', 'installment', 'pay later',
+            'payment info', 'cost', 'price', 'how much', 'total cost',
+            'payment plans', 'financing', 'credit options', 'bnpl',
+            'buy now pay later', 'installments', 'what payment methods',
+            'how much does it cost', 'final price', 'payment terms'
+        ];
+        paymentPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'payment');
+        });
+
+        // HELP INTENT
+        const helpPhrases = [
+            'help', 'I need help', 'assist me', 'support', 'customer service',
+            'I am confused', 'I don\'t understand', 'guide me', 'how to',
+            'what can you do', 'help me please', 'assistance needed',
+            'can you help', 'I\'m lost', 'don\'t know what to do',
+            'customer support', 'need assistance', 'confused', 'stuck'
+        ];
+        helpPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'help');
+        });
+
+        // COMPLAINT INTENT
+        const complaintPhrases = [
+            'I have a problem', 'this is terrible', 'very disappointed',
+            'poor service', 'bad experience', 'not satisfied', 'complaint',
+            'issue with order', 'problem with delivery', 'wrong product',
+            'late delivery', 'missing bottles', 'damaged product',
+            'not happy', 'unsatisfied', 'terrible service', 'awful',
+            'bad quality', 'wrong order', 'missing items', 'broken',
+            'delivery problem', 'order issue', 'service problem'
+        ];
+        complaintPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'complaint');
+        });
+
+        // CUSTOMER LOOKUP INTENT
+        const lookupPhrases = [
+            'my number is %phone%', 'customer %phone%', '%phone%',
+            'my account', 'check my account', 'account details',
+            'customer details', 'my information', 'account info',
+            'find my account', 'lookup account', 'my profile'
+        ];
+        lookupPhrases.forEach(phrase => {
+            this.manager.addDocument('en', phrase, 'customer_lookup');
+        });
+
+        // ADD NAMED ENTITIES
+        this.manager.addNamedEntityText('product', 'bottle', ['en'], [
+            'bottle', 'bottles', 'water', 'water bottle', '5 gallon', 'gallon',
+            'aqua', 'mineral water', 'drinking water', 'bottled water'
+        ]);
+        
+        this.manager.addNamedEntityText('product', 'dispenser', ['en'], [
+            'dispenser', 'water dispenser', 'cooler', 'water cooler', 'machine',
+            'tap', 'faucet', 'spout', 'table top dispenser'
+        ]);
+        
+        this.manager.addNamedEntityText('product', 'coupon', ['en'], [
+            'coupon', 'coupon book', 'package', 'deal', 'book',
+            'bulk package', 'bulk deal', 'subscription'
+        ]);
+
+        // Locations
+        this.manager.addNamedEntityText('location', 'dubai', ['en'], [
+            'dubai', 'dxb', 'dubai emirate', 'dubai city', 'marina', 'downtown', 'jbr', 'jumeirah'
+        ]);
+        
+        this.manager.addNamedEntityText('location', 'sharjah', ['en'], [
+            'sharjah', 'shj', 'sharjah emirate', 'sharjah city'
+        ]);
+        
+        this.manager.addNamedEntityText('location', 'ajman', ['en'], [
+            'ajman', 'ajm', 'ajman emirate', 'ajman city'
+        ]);
+
+        // Regex entities
+        this.manager.addRegexEntity('phone', 'en', /(\+?971|0)?[0-9]{8,9}/gi);
+        this.manager.addRegexEntity('quantity', 'en', /\b(\d+)\s*(bottle|bottles|piece|pieces|unit|units|gallon|gallons)?\b/gi);
+
+        // Urgency
+        this.manager.addNamedEntityText('urgency', 'high', ['en'], [
+            'urgent', 'asap', 'immediately', 'now', 'today', 'emergency', 'quick', 'fast', 'rush'
+        ]);
+
+        // ADD RESPONSES
+        this.manager.addAnswer('en', 'greeting', 'Hello! Welcome to our premium water delivery service! ??');
+        this.manager.addAnswer('en', 'order', 'I\'d be happy to help you place an order! What product would you like?');
+        this.manager.addAnswer('en', 'menu', 'Let me show you our complete product catalog!');
+        this.manager.addAnswer('en', 'delivery', 'Here\'s information about our delivery service!');
+        this.manager.addAnswer('en', 'payment', 'Here are our available payment options!');
+        this.manager.addAnswer('en', 'help', 'I\'m here to help! What do you need assistance with?');
+        this.manager.addAnswer('en', 'complaint', 'I\'m sorry to hear about the issue. Let me help resolve this!');
+        this.manager.addAnswer('en', 'customer_lookup', 'Let me look up your customer information!');
+    }
+
+    async trainModel() {
+        if (!nlpAvailable || this.isTrained) return;
+
+        try {
+            console.log('?? Training NLP model...');
+            await this.manager.train();
+            this.isTrained = true;
+            console.log('? NLP model trained successfully!');
+        } catch (error) {
+            console.error('? NLP training failed:', error);
+        }
+    }
+
+    async processMessage(message, context = {}) {
+        if (!nlpAvailable || !this.isTrained) {
+            return this.fallbackResult(message);
+        }
+
+        try {
+            const result = await this.manager.process('en', message);
+            
+            return {
+                intent: {
+                    intent: result.intent || 'unknown',
+                    confidence: result.score || 0
+                },
+                entities: this.extractEntities(result.entities || []),
+                sentiment: {
+                    sentiment: result.sentiment?.vote || 'neutral',
+                    score: result.sentiment?.score || 0,
+                    confidence: Math.abs(result.sentiment?.score || 0)
+                },
+                answer: result.answer,
+                originalResult: result
+            };
+        } catch (error) {
+            console.error('NLP processing error:', error);
+            return this.fallbackResult(message);
+        }
+    }
+
+    extractEntities(entities) {
+        const extracted = {
+            products: [],
+            locations: [],
+            phone_numbers: [],
+            quantities: [],
+            urgency: 'low'
+        };
+
+        entities.forEach(entity => {
+            switch(entity.entity) {
+                case 'product':
+                    const product = entity.resolution?.value || entity.utteranceText;
+                    if (!extracted.products.includes(product)) {
+                        extracted.products.push(product);
+                    }
+                    break;
+                case 'location':
+                    const location = entity.resolution?.value || entity.utteranceText;
+                    if (!extracted.locations.includes(location)) {
+                        extracted.locations.push(location);
+                    }
+                    break;
+                case 'phone':
+                    const phone = entity.utteranceText.replace(/\s+/g, '');
+                    if (phone.length >= 8 && !extracted.phone_numbers.includes(phone)) {
+                        extracted.phone_numbers.push(phone);
+                    }
+                    break;
+                case 'quantity':
+                    const qty = parseInt(entity.utteranceText);
+                    if (!isNaN(qty) && qty > 0) {
+                        extracted.quantities.push({ number: qty, unit: 'unit' });
+                    }
+                    break;
+                case 'urgency':
+                    extracted.urgency = entity.resolution?.value || 'medium';
+                    break;
+            }
+        });
+
+        return extracted;
+    }
+
+    fallbackResult(message) {
+        return {
+            intent: { intent: 'unknown', confidence: 0 },
+            entities: { products: [], locations: [], phone_numbers: [], quantities: [], urgency: 'low' },
+            sentiment: { sentiment: 'neutral', score: 0, confidence: 0 },
+            answer: 'I understand you need assistance. How can I help you?'
+        };
+    }
+
+    async addTrainingData(utterance, intent) {
+        if (!nlpAvailable) return false;
+        
+        try {
+            this.manager.addDocument('en', utterance, intent);
+            await this.manager.train();
+            console.log(`? Added training data: "${utterance}" -> ${intent}`);
+            return true;
+        } catch (error) {
+            console.error('? Failed to add training data:', error);
+            return false;
+        }
+    }
+
+    getModelStats() {
+        if (!nlpAvailable) {
+            return { nlpAvailable: false, message: 'NLP not available' };
+        }
+
+        return {
+            nlpAvailable: true,
+            isTrained: this.isTrained,
+            languages: this.manager?.settings?.languages || [],
+            totalDocuments: 'Available after training'
+        };
+    }
+}
+
+// Initialize NLP
+if (nlpAvailable) {
+    nlpProcessor = new WaterDeliveryNLP();
+    
+    // Train model on startup
+    (async () => {
+        try {
+            await nlpProcessor.trainModel();
+            nlpReady = true;
+        } catch (error) {
+            console.error('Failed to initialize NLP:', error);
+        }
+    })();
+} else {
+    console.log('?? Running in basic mode. Install node-nlp for AI features: npm install node-nlp');
+}
 
 // Keep-alive functions
 async function keepAlive() {
@@ -191,7 +545,7 @@ function startKeepAlive() {
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// Health check endpoint
+// Enhanced health check endpoint
 app.get('/health', (req, res) => {
     const healthData = {
         status: 'healthy',
@@ -199,8 +553,10 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development',
-        version: '2.0.0',
-        activeSessions: userSessions.size
+        version: nlpAvailable ? '3.0.0-NLP' : '2.0.0-Basic',
+        activeSessions: userSessions.size,
+        nlpStatus: nlpAvailable ? (nlpReady ? 'ready' : 'training') : 'not_available',
+        nlpQueries: nlpAnalytics.totalQueries
     };
     
     console.log(`Health check called from ${req.ip} at ${healthData.timestamp}`);
@@ -233,7 +589,7 @@ app.post('/webhook', (req, res) => {
                     const messages = change.value.messages;
                     if (messages) {
                         messages.forEach(message => {
-                            console.log('Received message:', message);
+                            console.log('?? Received message:', message);
                             handleIncomingMessage(message, change.value.metadata.phone_number_id);
                         });
                     }
@@ -246,7 +602,7 @@ app.post('/webhook', (req, res) => {
     }
 });
 
-// Handle incoming messages with conversation state
+// Enhanced message handling with optional NLP
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
@@ -258,19 +614,369 @@ async function handleIncomingMessage(message, phoneNumberId) {
                 state: 'greeting',
                 orderInProgress: null,
                 customerInfo: null,
-                lastActivity: Date.now()
+                lastActivity: Date.now(),
+                conversationHistory: [],
+                nlpContext: {}
             });
         }
         
         const session = userSessions.get(from);
         session.lastActivity = Date.now();
         
-        let response = await generateEnhancedResponse(messageBody, session, from);
+        // Add to conversation history
+        session.conversationHistory = session.conversationHistory || [];
+        session.conversationHistory.push({
+            message: messageBody,
+            timestamp: Date.now(),
+            type: 'user'
+        });
+        if (session.conversationHistory.length > 10) {
+            session.conversationHistory.shift();
+        }
+        
+        let response;
+        if (nlpAvailable && nlpReady) {
+            response = await generateNLPEnhancedResponse(messageBody, session, from);
+        } else {
+            response = await generateEnhancedResponse(messageBody, session, from);
+        }
+        
+        // Add bot response to history
+        session.conversationHistory.push({
+            message: response,
+            timestamp: Date.now(),
+            type: 'bot'
+        });
+        
         await sendMessage(from, response, phoneNumberId);
     }
 }
 
-// Enhanced response generation with knowledge base and order handling
+// NLP-Enhanced response generation
+async function generateNLPEnhancedResponse(message, session, userPhone) {
+    const startTime = Date.now();
+    const lowerMessage = message.toLowerCase().trim();
+    
+    try {
+        // Handle existing states first
+        if (lowerMessage.startsWith('order ')) {
+            return await handleOrderCommand(message, session, userPhone);
+        }
+        
+        if (session.state === 'confirming_order' && (lowerMessage.includes('yes') || lowerMessage.includes('confirm'))) {
+            return await processOrder(session, userPhone);
+        }
+        
+        if (session.state === 'confirming_order' && (lowerMessage.includes('no') || lowerMessage.includes('cancel'))) {
+            session.state = 'greeting';
+            session.orderInProgress = null;
+            return "Order cancelled. How else can I help you today? ??";
+        }
+        
+        if (session.state === 'collecting_address') {
+            session.orderInProgress.address = message;
+            session.state = 'confirming_order';
+            return await generateOrderConfirmation(session.orderInProgress);
+        }
+
+        if (session.state === 'handling_complaint') {
+            return await handleComplaintFollowup(message, session, userPhone);
+        }
+
+        // NLP Processing
+        let nlpResult = null;
+        
+        if (nlpReady) {
+            try {
+                nlpResult = await nlpProcessor.processMessage(message, {
+                    state: session.state,
+                    conversationHistory: session.conversationHistory.slice(-3),
+                    orderInProgress: !!session.orderInProgress
+                });
+                
+                console.log('?? NLP Analysis:', {
+                    intent: nlpResult.intent.intent,
+                    confidence: (nlpResult.intent.confidence * 100).toFixed(1) + '%',
+                    entities: nlpResult.entities,
+                    sentiment: nlpResult.sentiment.sentiment
+                });
+                
+                // Track analytics
+                if (ENABLE_NLP_ANALYTICS) {
+                    trackNLPPerformance(
+                        nlpResult.intent.intent,
+                        nlpResult.intent.confidence,
+                        Date.now() - startTime,
+                        false
+                    );
+                }
+                
+                // Use NLP results for high-confidence intents
+                if (nlpResult.intent.confidence >= NLP_CONFIDENCE_THRESHOLD) {
+                    const nlpResponse = await handleNLPIntent(nlpResult, session, userPhone);
+                    if (nlpResponse) return nlpResponse;
+                }
+                
+            } catch (error) {
+                console.error('NLP processing error:', error);
+                if (ENABLE_NLP_ANALYTICS) {
+                    trackNLPPerformance(null, 0, Date.now() - startTime, true);
+                }
+            }
+        }
+        
+        // Fallback to original logic
+        if (ENABLE_NLP_ANALYTICS) {
+            nlpAnalytics.fallbacksUsed++;
+        }
+        
+        return await generateEnhancedResponse(message, session, userPhone);
+        
+    } catch (error) {
+        console.error('Error in generateNLPEnhancedResponse:', error);
+        return "I apologize, but I encountered a technical issue. Please try again or contact our support team.";
+    }
+}
+
+// NLP Intent Handler
+async function handleNLPIntent(nlpResult, session, userPhone) {
+    const { intent, entities, sentiment } = nlpResult;
+    
+    session.nlpContext = {
+        lastIntent: intent.intent,
+        lastEntities: entities,
+        lastSentiment: sentiment.sentiment,
+        timestamp: Date.now()
+    };
+    
+    switch (intent.intent) {
+        case 'greeting':
+            const hour = new Date().getHours();
+            let timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+            
+            return `${timeGreeting}! Welcome to our AI-powered water delivery service! ??
+
+I'm your intelligent assistant and can understand natural language. I can help you with:
+
+• ?? **Smart Ordering** - Just tell me what you need
+• ?? **Product Info** - Ask about any product naturally
+• ?? **Delivery Planning** - Schedule deliveries intelligently
+• ?? **Payment Options** - Flexible payment solutions
+• ?? **Account Management** - Send your mobile for lookup
+
+*How can I assist you today?*
+
+Try saying: "I need water for my office" or "What's the cheapest option?"`;
+
+        case 'order':
+            return await handleNLPOrder(entities, session, userPhone);
+            
+        case 'menu':
+            let menuResponse = KNOWLEDGE_BASE.menu.response;
+            if (entities.locations.length > 0) {
+                const location = entities.locations[0].toLowerCase();
+                menuResponse += `\n\n*? Great news! We deliver to ${location}*`;
+            }
+            return menuResponse;
+
+        case 'delivery':
+            return await handleDeliveryInquiry(entities, session);
+            
+        case 'payment':
+            let paymentResponse = KNOWLEDGE_BASE.payment.response;
+            if (entities.products.some(p => p.includes('coupon'))) {
+                paymentResponse += "\n\n*?? Coupon Book Special:* Buy Now Pay Later available for 100+40 book!";
+            }
+            return paymentResponse;
+
+        case 'help':
+            return await handleHelpRequest(session, entities);
+            
+        case 'complaint':
+            return await handleComplaint(nlpResult, session, userPhone);
+            
+        case 'customer_lookup':
+            if (entities.phone_numbers.length > 0) {
+                return await getCustomerByMobile(entities.phone_numbers[0]);
+            }
+            return "Please share your mobile number so I can look up your account details.";
+    }
+    
+    return null;
+}
+
+// Enhanced order handling with NLP entities
+async function handleNLPOrder(entities, session, userPhone) {
+    if (entities.products.length > 0) {
+        const requestedProduct = entities.products[0];
+        let quantity = 1;
+        
+        if (entities.quantities.length > 0) {
+            quantity = entities.quantities[0].number;
+        }
+        
+        let productKey = mapProductToKey(requestedProduct);
+        
+        if (productKey) {
+            const orderCommand = `order ${quantity > 1 ? quantity + ' ' : ''}${productKey.replace('_', ' ')}`;
+            return await handleOrderCommand(orderCommand, session, userPhone);
+        } else {
+            return `I understand you're looking for "${requestedProduct}". 
+
+Here are our available products:
+${Object.entries(PRODUCTS).map(([key, product]) => 
+    `• ${product.name} - AED ${product.price}${product.deposit > 0 ? ` (+${product.deposit} deposit)` : ''}`
+).join('\n')}
+
+*Which product interests you most?*`;
+        }
+    }
+    
+    return `I'd love to help you place an order! 
+
+*QUICK ORDER OPTIONS:*
+• "I need water bottles" - For individual bottles
+• "Show me dispensers" - For water equipment  
+• "I want the best deal" - For coupon books
+• "Office water solution" - For bulk orders
+
+What would work best for you?`;
+}
+
+// Product mapping helper
+function mapProductToKey(nlpProduct) {
+    const productMappings = {
+        'bottle': 'single_bottle',
+        'water': 'single_bottle', 
+        'dispenser': 'table_dispenser',
+        'cooler': 'premium_cooler',
+        'coupon': 'coupon_10_1',
+        'book': 'coupon_10_1',
+        'package': 'premium_package'
+    };
+    
+    const lowerProduct = nlpProduct.toLowerCase();
+    for (const [key, value] of Object.entries(productMappings)) {
+        if (lowerProduct.includes(key)) {
+            return value;
+        }
+    }
+    return null;
+}
+
+// Enhanced delivery inquiry handler
+async function handleDeliveryInquiry(entities, session) {
+    let response = KNOWLEDGE_BASE.delivery.response;
+    
+    if (entities.locations.length > 0) {
+        const location = entities.locations[0].toLowerCase();
+        
+        switch (location) {
+            case 'dubai':
+            case 'dxb':
+                response += "\n\n*??? DUBAI DELIVERY:*\n• Same-day delivery available\n• All areas except JAFZA\n• Premium areas: Marina, Downtown, JBR";
+                break;
+            case 'sharjah':
+            case 'shj':
+                response += "\n\n*??? SHARJAH DELIVERY:*\n• Next-day delivery standard\n• Full emirate coverage\n• Industrial areas supported";
+                break;
+            case 'ajman':
+            case 'ajm':
+                response += "\n\n*?? AJMAN DELIVERY:*\n• Same/next-day delivery\n• Complete coverage\n• Beach areas included";
+                break;
+        }
+    }
+    
+    return response;
+}
+
+// Help request handler
+async function handleHelpRequest(session, entities) {
+    if (session.orderInProgress) {
+        return `I see you have an order in progress! ??
+
+*Current Order:* ${session.orderInProgress.product.name}
+*Status:* ${session.state}
+
+*I can help with:*
+• ?? Modify your order
+• ?? Change delivery address  
+• ?? Payment questions
+• ? Cancel the order
+
+*What would you like to do?*`;
+    }
+    
+    return `*I'M HERE TO HELP!* ???
+
+*?? POPULAR ACTIONS:*
+• "Show menu" - Browse all products
+• "Order water" - Smart ordering assistant
+• "Delivery to [area]" - Area-specific info
+• Send mobile number - Instant account lookup
+
+*?? AI FEATURES:*
+${nlpAvailable ? '• Natural language understanding - talk normally!\n• Context awareness - I remember our conversation\n• Smart suggestions - personalized recommendations\n• Instant complaint resolution' : '• Keyword-based assistance\n• Order management\n• Customer support\n• Product information'}
+
+What would you like help with?`;
+}
+
+// Complaint handler
+async function handleComplaint(nlpResult, session, userPhone) {
+    const severity = nlpResult.sentiment.sentiment === 'negative' ? 'high' : 'medium';
+    
+    session.state = 'handling_complaint';
+    session.complaintData = {
+        severity: severity,
+        initialMessage: nlpResult.originalResult?.utterance,
+        timestamp: new Date().toISOString(),
+        sentiment: nlpResult.sentiment
+    };
+    
+    return `I sincerely apologize for any inconvenience! ??
+
+${severity === 'high' ? '?? **HIGH PRIORITY COMPLAINT**' : '?? **COMPLAINT LOGGED**'}
+
+Your satisfaction is our priority. I'm escalating this to management immediately.
+
+*Please provide details:*
+• ?? What specific problem occurred?  
+• ? When did this happen?
+• ?? Order details (if applicable)
+
+*I GUARANTEE:*
+• ? Immediate management attention
+• ?? Quick resolution within 2 hours  
+• ?? Fair compensation if warranted
+
+*What exactly went wrong?*`;
+}
+
+// Complaint follow-up handler
+async function handleComplaintFollowup(message, session, userPhone) {
+    const complaintData = session.complaintData;
+    complaintData.followupMessage = message;
+    complaintData.updated = new Date().toISOString();
+    
+    session.state = 'greeting';
+    
+    return `Thank you for providing those details. 
+
+*COMPLAINT SUMMARY:*
+• Priority: ${complaintData.severity.toUpperCase()}
+• Details: ? Received and logged
+• Reference: #CMP${Date.now().toString().slice(-6)}
+
+*NEXT STEPS:*
+1. ????? Management team notified
+2. ?? We'll call you within 2 hours  
+3. ?? Resolution team assigned
+4. ?? Follow-up confirmation sent
+
+We'll review and provide appropriate compensation. Thank you for your patience! ??`;
+}
+
+// Original enhanced response generation (fallback)
 async function generateEnhancedResponse(message, session, userPhone) {
     const lowerMessage = message.toLowerCase().trim();
     
@@ -314,19 +1020,17 @@ async function generateEnhancedResponse(message, session, userPhone) {
         }
     }
     
-    // Fallback responses
+    // Enhanced fallback
     if (lowerMessage.includes('help')) {
-        return `*HOW I CAN HELP*
+        return `*HOW I CAN HELP* ??
 
-Type "menu" - See all products
-Type "order [product]" - Place an order
-Send mobile number - Get customer details
-Ask about delivery, pricing, coupons
+${nlpAvailable ? '• Talk to me naturally - I understand context!' : '• Type "menu" - See all products'}
+• Type "order [product]" - Place an order
+• Send mobile number - Get customer details
+• Ask about delivery, pricing, coupons
 
-*Example orders:*
-• "order single bottle"
-• "order coupon book"
-• "order dispenser"
+*Example queries:*
+${nlpAvailable ? '• "I need water for 20 people"\n• "What\'s the most economical option?"\n• "Can you deliver to Marina tomorrow?"' : '• "order single bottle"\n• "order coupon book"\n• "order dispenser"'}
 
 What would you like to do?`;
     }
@@ -334,17 +1038,42 @@ What would you like to do?`;
     return `I understand you're asking about: "${message}"
 
 I can help you with:
-- Product orders - Type "order [product name]"
+- Product orders - ${nlpAvailable ? 'Just tell me what you need naturally' : 'Type "order [product name]"'}
 - Product information - Type "menu"
 - Delivery information - Ask about delivery
 - Payment options - Ask about payment
 
-*Or send a mobile number to look up customer details*
+${nlpAvailable ? '*Just talk to me in your own words - I understand natural language!*' : '*Or send a mobile number to look up customer details*'}
 
 What specific information do you need?`;
 }
 
-// Handle order commands
+// NLP Performance tracking
+function trackNLPPerformance(intent, confidence, responseTime, hasError = false) {
+    if (!ENABLE_NLP_ANALYTICS) return;
+    
+    nlpAnalytics.totalQueries++;
+    
+    if (hasError) {
+        nlpAnalytics.errors++;
+        return;
+    }
+    
+    if (intent && !nlpAnalytics.intentDistribution[intent]) {
+        nlpAnalytics.intentDistribution[intent] = 0;
+    }
+    if (intent) nlpAnalytics.intentDistribution[intent]++;
+    
+    const totalConfidence = nlpAnalytics.averageConfidence * (nlpAnalytics.totalQueries - 1) + (confidence || 0);
+    nlpAnalytics.averageConfidence = totalConfidence / nlpAnalytics.totalQueries;
+    
+    nlpAnalytics.responseTime.push(responseTime);
+    if (nlpAnalytics.responseTime.length > 100) {
+        nlpAnalytics.responseTime.shift();
+    }
+}
+
+// ALL YOUR EXISTING FUNCTIONS (unchanged)
 async function handleOrderCommand(message, session, userPhone) {
     const orderText = message.substring(6).toLowerCase().trim(); // Remove "order "
     
@@ -447,7 +1176,7 @@ Please try again or contact our support team for assistance.`;
             session.state = 'greeting';
             session.orderInProgress = null;
             
-            return `*ORDER CONFIRMED*
+            return `*ORDER CONFIRMED* ?
 
 *Order ID:* ${erpOrder.orderName}
 *Product:* ${orderInfo.product.name}
@@ -459,7 +1188,7 @@ Our delivery team will contact you within 2 hours to schedule delivery.
 *Delivery Areas:*
 Dubai, Sharjah, Ajman
 
-Thank you for choosing our service!`;
+Thank you for choosing our ${nlpAvailable ? 'AI-powered ' : ''}service!`;
         } else {
             return handleOrderError(erpOrder.error, erpOrder.errorType);
         }
@@ -644,7 +1373,7 @@ async function createERPOrder(orderInfo, customerName) {
             }],
             custom_delivery_address: orderInfo.address,
             custom_customer_phone: orderInfo.customerPhone,
-            custom_order_source: 'WhatsApp Bot'
+            custom_order_source: nlpAvailable ? 'WhatsApp AI Bot' : 'WhatsApp Bot'
         };
         
         // If there's a deposit, add it as a separate line item
@@ -742,7 +1471,7 @@ async function getCustomerByMobile(mobileNumber) {
             const addressInfo = await getCustomerAddress(customer.customer_primary_address || customer.name);
             const customDocsInfo = await getCustomDocuments(customer.name);
             
-            let response = `*CUSTOMER FOUND*
+            let response = `*CUSTOMER FOUND* ?
 
 *Name:* ${customer.customer_name}
 *Mobile:* ${customer.mobile_no}
@@ -752,6 +1481,13 @@ ${addressInfo}`;
             if (customDocsInfo) {
                 response += `${customDocsInfo}`;
             }
+            
+            response += `\n*?? QUICK ACTIONS:*
+• ${nlpAvailable ? '"Order water" - Natural language ordering' : '"order [product]" - Place new order'}
+• "Delivery schedule" - Check delivery info
+• "Account update" - Update details
+
+What would you like to do?`;
             
             return response;
             
@@ -960,44 +1696,352 @@ async function sendMessage(to, message, phoneNumberId) {
 setInterval(() => {
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
+    let cleanedCount = 0;
     
     for (const [phone, session] of userSessions.entries()) {
         if (now - session.lastActivity > oneHour) {
             userSessions.delete(phone);
-            console.log(`Cleaned up inactive session for ${phone}`);
+            cleanedCount++;
         }
     }
-}, 15 * 60 * 1000); // Check every 15 minutes
+    
+    if (cleanedCount > 0) {
+        console.log(`?? Cleaned up ${cleanedCount} inactive sessions. Active: ${userSessions.size}`);
+    }
+}, 15 * 60 * 1000);
+
+// NLP TESTING ENDPOINTS (Only available if NLP is enabled)
+
+if (nlpAvailable) {
+    // Test NLP endpoint
+    app.get('/test-nlp/:message', async (req, res) => {
+        try {
+            const testMessage = decodeURIComponent(req.params.message);
+            const mockSession = { state: 'greeting', orderInProgress: null, conversationHistory: [] };
+            
+            if (!nlpReady) {
+                return res.status(503).json({
+                    success: false,
+                    error: 'NLP system is still training. Please try again in a few seconds.',
+                    nlpReady: false
+                });
+            }
+            
+            const startTime = Date.now();
+            const nlpResult = await nlpProcessor.processMessage(testMessage, mockSession);
+            const processingTime = Date.now() - startTime;
+            
+            const response = await generateNLPEnhancedResponse(testMessage, mockSession, 'test-user');
+            
+            res.json({
+                success: true,
+                input: testMessage,
+                nlp_analysis: {
+                    intent: nlpResult.intent.intent,
+                    confidence: (nlpResult.intent.confidence * 100).toFixed(1) + '%',
+                    entities: nlpResult.entities,
+                    sentiment: nlpResult.sentiment.sentiment
+                },
+                suggested_response: response,
+                processing_time_ms: processingTime,
+                nlp_ready: nlpReady
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message,
+                nlp_ready: nlpReady
+            });
+        }
+    });
+
+    // Add training data endpoint
+    app.post('/nlp-train', async (req, res) => {
+        try {
+            const { utterance, intent } = req.body;
+            
+            if (!utterance || !intent) {
+                return res.status(400).json({ 
+                    error: 'utterance and intent are required' 
+                });
+            }
+            
+            if (!nlpReady) {
+                return res.status(503).json({
+                    error: 'NLP system is not ready',
+                    nlpReady: false
+                });
+            }
+            
+            const success = await nlpProcessor.addTrainingData(utterance, intent);
+            
+            res.json({
+                success: success,
+                message: success ? `Training data added: "${utterance}" -> ${intent}` : 'Failed to add training data'
+            });
+        } catch (error) {
+            res.status(500).json({ 
+                success: false,
+                error: error.message 
+            });
+        }
+    });
+
+    // NLP Analytics
+    app.get('/nlp-analytics', (req, res) => {
+        const avgResponseTime = nlpAnalytics.responseTime.length > 0 
+            ? nlpAnalytics.responseTime.reduce((a, b) => a + b, 0) / nlpAnalytics.responseTime.length 
+            : 0;
+        
+        res.json({
+            ...nlpAnalytics,
+            averageResponseTime: Math.round(avgResponseTime),
+            errorRate: nlpAnalytics.totalQueries > 0 ? 
+                ((nlpAnalytics.errors / nlpAnalytics.totalQueries) * 100).toFixed(2) : '0.00',
+            fallbackRate: nlpAnalytics.totalQueries > 0 ? 
+                ((nlpAnalytics.fallbacksUsed / nlpAnalytics.totalQueries) * 100).toFixed(2) : '0.00',
+            nlpAvailable: nlpAvailable,
+            nlpReady: nlpReady
+        });
+    });
+
+    // Simple NLP Dashboard
+    app.get('/nlp-dashboard', (req, res) => {
+        const dashboardHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>?? AI Water Delivery Bot - NLP Testing</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    min-height: 100vh; 
+                    padding: 20px; 
+                }
+                .container { max-width: 1200px; margin: 0 auto; }
+                .header { 
+                    text-align: center; 
+                    color: white; 
+                    margin-bottom: 30px; 
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+                }
+                .status-bar { 
+                    background: ${nlpReady ? 'linear-gradient(135deg, #4CAF50, #45a049)' : 'linear-gradient(135deg, #FF9800, #F57C00)'}; 
+                    color: white; 
+                    padding: 15px; 
+                    border-radius: 10px; 
+                    margin-bottom: 20px; 
+                    text-align: center; 
+                    font-weight: bold; 
+                }
+                .card { 
+                    background: rgba(255, 255, 255, 0.95); 
+                    backdrop-filter: blur(10px); 
+                    padding: 25px; 
+                    border-radius: 15px; 
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+                    margin-bottom: 20px;
+                }
+                .input-group { margin: 15px 0; }
+                .input-group label { 
+                    display: block; 
+                    margin-bottom: 8px; 
+                    font-weight: 600; 
+                    color: #555; 
+                }
+                .input-group input { 
+                    width: 100%; 
+                    padding: 12px; 
+                    border: 2px solid #e1e1e1; 
+                    border-radius: 8px; 
+                    font-size: 14px; 
+                }
+                .btn { 
+                    background: linear-gradient(135deg, #667eea, #764ba2); 
+                    color: white; 
+                    padding: 12px 24px; 
+                    border: none; 
+                    border-radius: 8px; 
+                    cursor: pointer; 
+                    font-weight: 600; 
+                    width: 100%; 
+                }
+                .btn:hover { transform: translateY(-2px); }
+                .result { 
+                    background: #f8f9fa; 
+                    padding: 20px; 
+                    margin: 15px 0; 
+                    border-radius: 10px; 
+                    border-left: 5px solid #667eea; 
+                }
+                pre { 
+                    background: #2c3e50; 
+                    color: #ecf0f1; 
+                    padding: 15px; 
+                    border-radius: 8px; 
+                    overflow-x: auto; 
+                    margin: 10px 0; 
+                }
+                .test-cases { 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+                    gap: 10px; 
+                    margin: 15px 0; 
+                }
+                .test-case { 
+                    background: linear-gradient(135deg, #e74c3c, #c0392b); 
+                    color: white; 
+                    padding: 12px; 
+                    border-radius: 8px; 
+                    cursor: pointer; 
+                    text-align: center; 
+                    font-size: 13px; 
+                    font-weight: 600; 
+                }
+                .test-case:hover { transform: translateY(-2px); }
+                .test-case:nth-child(2n) { background: linear-gradient(135deg, #3498db, #2980b9); }
+                .test-case:nth-child(3n) { background: linear-gradient(135deg, #27ae60, #229954); }
+                .test-case:nth-child(4n) { background: linear-gradient(135deg, #f39c12, #d68910); }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>?? AI Water Delivery Bot</h1>
+                    <p>Natural Language Processing Testing Dashboard</p>
+                </div>
+                
+                <div class="status-bar">
+                    NLP Engine: <strong>${nlpReady ? '? READY' : '?? TRAINING'}</strong> | 
+                    Sessions: <strong>${userSessions.size}</strong> | 
+                    Queries: <strong>${nlpAnalytics.totalQueries}</strong>
+                </div>
+                
+                <div class="card">
+                    <h3>?? Test NLP Processing</h3>
+                    <div class="input-group">
+                        <label>Test Message:</label>
+                        <input type="text" id="testMessage" placeholder="Try: I need water for my office" maxlength="200">
+                    </div>
+                    <button class="btn" onclick="testMessage()" ${!nlpReady ? 'disabled' : ''}>
+                        Analyze Message
+                    </button>
+                    <div id="testResult"></div>
+                </div>
+                
+                <div class="card">
+                    <h3>?? Quick Test Cases</h3>
+                    <p style="margin-bottom: 15px;">Click to test:</p>
+                    <div class="test-cases">
+                        <div class="test-case" onclick="runTest('hello there')">?? Greeting</div>
+                        <div class="test-case" onclick="runTest('I need 5 water bottles for office')">?? Order Intent</div>
+                        <div class="test-case" onclick="runTest('show me your menu and prices')">?? Menu Request</div>
+                        <div class="test-case" onclick="runTest('do you deliver to Dubai Marina?')">?? Delivery Query</div>
+                        <div class="test-case" onclick="runTest('what payment methods do you accept')">?? Payment Info</div>
+                        <div class="test-case" onclick="runTest('I need help with my order')">? Help Request</div>
+                        <div class="test-case" onclick="runTest('this service is terrible')">?? Complaint</div>
+                        <div class="test-case" onclick="runTest('971501234567')">?? Phone Lookup</div>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                async function testMessage() {
+                    const message = document.getElementById('testMessage').value.trim();
+                    if (!message) {
+                        alert('Please enter a message to test');
+                        return;
+                    }
+                    
+                    try {
+                        const response = await fetch('/test-nlp/' + encodeURIComponent(message));
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            document.getElementById('testResult').innerHTML = \`
+                                <div class="result">
+                                    <strong>?? Input:</strong> \${result.input}<br><br>
+                                    <strong>?? Intent:</strong> \${result.nlp_analysis.intent}<br>
+                                    <strong>?? Confidence:</strong> \${result.nlp_analysis.confidence}<br>
+                                    <strong>??? Entities:</strong> \${JSON.stringify(result.nlp_analysis.entities)}<br>
+                                    <strong>?? Sentiment:</strong> \${result.nlp_analysis.sentiment}<br><br>
+                                    <strong>?? Bot Response:</strong>
+                                    <pre>\${result.suggested_response}</pre>
+                                </div>
+                            \`;
+                        } else {
+                            document.getElementById('testResult').innerHTML = \`<div class="result" style="border-color: red;">? Error: \${result.error}</div>\`;
+                        }
+                    } catch (error) {
+                        document.getElementById('testResult').innerHTML = \`<div class="result" style="border-color: red;">? Network Error: \${error.message}</div>\`;
+                    }
+                }
+                
+                function runTest(message) {
+                    document.getElementById('testMessage').value = message;
+                    testMessage();
+                }
+                
+                document.getElementById('testMessage').addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        testMessage();
+                    }
+                });
+                
+                document.getElementById('testMessage').focus();
+            </script>
+        </body>
+        </html>
+        `;
+        res.send(dashboardHtml);
+    });
+}
 
 // Enhanced homepage
 app.get('/', (req, res) => {
+    const avgResponseTime = nlpAnalytics.responseTime.length > 0 
+        ? nlpAnalytics.responseTime.reduce((a, b) => a + b, 0) / nlpAnalytics.responseTime.length 
+        : 0;
+
     const statusHtml = `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot</title>
+        <title>${nlpAvailable ? 'AI-Powered ' : ''}Water Delivery Bot</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px10px rgba(0,0,0,0.1); }
-            .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
-            .endpoint { margin: 10px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #007bff; }
-            .active { color: #28a745; font-weight: bold; }
-            .inactive { color: #ffc107; }
-            .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
-            .stat-box { padding: 20px; background: #007bff; color: white; border-radius: 8px; text-align: center; }
-            h1 { color: #333; text-align: center; }
-            h2 { color: #007bff; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+            .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+            .header { text-align: center; color: white; margin-bottom: 30px; }
+            .header h1 { font-size: 2.5em; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+            .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+            .card { background: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+            .status { padding: 20px; background: linear-gradient(135deg, #4CAF50, #45a049); color: white; border-radius: 10px; margin-bottom: 20px; }
+            .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
+            .stat-box { padding: 20px; background: linear-gradient(135deg, #2196F3, #1976D2); color: white; border-radius: 10px; text-align: center; }
+            .stat-box h3 { margin: 0; font-size: 2em; }
+            .feature { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2196F3; }
+            .btn { display: inline-block; padding: 12px 24px; background: #2196F3; color: white; text-decoration: none; border-radius: 8px; margin: 5px; font-weight: bold; }
+            .btn:hover { background: #1976D2; }
+            .nlp-badge { background: ${nlpAvailable ? '#4CAF50' : '#FF9800'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot</h1>
+            <div class="header">
+                <h1>?? ${nlpAvailable ? 'AI-Powered ' : ''}Water Delivery Bot</h1>
+                <p>Advanced WhatsApp Business Integration ${nlpAvailable ? 'with Natural Language Processing' : ''}</p>
+                <div class="nlp-badge">${nlpAvailable ? (nlpReady ? 'NLP READY' : 'NLP TRAINING') : 'BASIC MODE'}</div>
+            </div>
+            
             <div class="status">
-                <h2>Server Status: <span class="active">RUNNING</span></h2>
-                <p><strong>Version:</strong> 2.0.0 (Enhanced with Order Management)</p>
-                <p><strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds</p>
-                <p><strong>Keep-alive:</strong> <span class="${KEEP_ALIVE_URL ? 'active' : 'inactive'}">${KEEP_ALIVE_URL ? 'ENABLED' : 'DISABLED'}</span></p>
-                <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+                <h2 style="margin: 0 0 10px 0;">?? System Status: RUNNING</h2>
+                <p><strong>Version:</strong> ${nlpAvailable ? '3.0.0-NLP' : '2.0.0-Basic'} | 
+                   <strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds | 
+                   <strong>Keep-alive:</strong> ${KEEP_ALIVE_URL ? 'ENABLED' : 'DISABLED'}</p>
             </div>
             
             <div class="stats">
@@ -1007,32 +2051,61 @@ app.get('/', (req, res) => {
                 </div>
                 <div class="stat-box">
                     <h3>${Object.keys(PRODUCTS).length}</h3>
-                    <p>Products Available</p>
+                    <p>Products</p>
                 </div>
+                ${nlpAvailable ? `
+                <div class="stat-box">
+                    <h3>${nlpAnalytics.totalQueries}</h3>
+                    <p>NLP Queries</p>
+                </div>
+                <div class="stat-box">
+                    <h3>${Math.round(avgResponseTime)}ms</h3>
+                    <p>Avg Response</p>
+                </div>` : `
                 <div class="stat-box">
                     <h3>${Object.keys(KNOWLEDGE_BASE).length}</h3>
                     <p>Knowledge Categories</p>
-                </div>
+                </div>`}
             </div>
             
-            <h3>Available Endpoints:</h3>
-            <div class="endpoint"><strong>/health</strong> - Health check and system status</div>
-            <div class="endpoint"><strong>/keep-alive-status</strong> - Keep-alive configuration</div>
-            <div class="endpoint"><strong>/test-dotorders-erp</strong> - Test ERPNext connection</div>
-            <div class="endpoint"><strong>/webhook</strong> - WhatsApp webhook endpoint</div>
-            <div class="endpoint"><strong>/debug-customer</strong> - Debug customer data structure</div>
-            <div class="endpoint"><strong>/debug-mobile/:number</strong> - Debug mobile number search</div>
-            
-            <h3>Bot Capabilities:</h3>
-            <ul>
-                <li>Customer query handling with knowledge base</li>
-                <li>Product catalog and pricing information</li>
-                <li>Order placement and confirmation</li>
-                <li>ERPNext integration for order management</li>
-                <li>Customer lookup by mobile number</li>
-                <li>Conversation state management</li>
-                <li>Automatic session cleanup</li>
-            </ul>
+            <div class="cards">
+                ${nlpAvailable ? `
+                <div class="card">
+                    <h3>?? AI Features</h3>
+                    <div class="feature">Natural Language Understanding</div>
+                    <div class="feature">Context-Aware Conversations</div>
+                    <div class="feature">Sentiment Analysis</div>
+                    <div class="feature">Smart Entity Extraction</div>
+                    <div class="feature">Intelligent Fallbacks</div>
+                    <a href="/nlp-dashboard" class="btn">?? Test NLP</a>
+                    <a href="/nlp-analytics" class="btn">?? Analytics</a>
+                </div>` : `
+                <div class="card">
+                    <h3>? Install AI Features</h3>
+                    <p>Enable natural language processing:</p>
+                    <div class="feature">Run: npm install node-nlp</div>
+                    <div class="feature">Restart server to activate AI</div>
+                    <p style="margin-top: 15px; color: #666;">Currently running in basic keyword mode</p>
+                </div>`}
+                
+                <div class="card">
+                    <h3>??? API Endpoints</h3>
+                    <div class="feature"><strong>/health</strong> - System health check</div>
+                    <div class="feature"><strong>/sessions</strong> - Active session info</div>
+                    <div class="feature"><strong>/test-dotorders-erp</strong> - Test ERP connection</div>
+                    ${nlpAvailable ? '<div class="feature"><strong>/test-nlp/[message]</strong> - Test NLP</div>' : ''}
+                </div>
+                
+                <div class="card">
+                    <h3>?? Business Features</h3>
+                    <div class="feature">${nlpAvailable ? 'Smart' : 'Keyword-based'} Order Processing</div>
+                    <div class="feature">Customer Account Management</div>
+                    <div class="feature">ERPNext Integration</div>
+                    <div class="feature">WhatsApp Business API</div>
+                    <div class="feature">Conversation State Management</div>
+                    <div class="feature">Automated Session Cleanup</div>
+                </div>
+            </div>
         </div>
     </body>
     </html>
@@ -1049,12 +2122,18 @@ app.get('/test-dotorders-erp', async (req, res) => {
                 'Content-Type': 'application/json'
             }
         });
-        res.json({ status: 'success', message: 'ERPNext connection working!', data: response.data });
+        res.json({ 
+            status: 'success', 
+            message: 'ERPNext connection working!', 
+            data: response.data,
+            timestamp: new Date().toISOString()
+        });
     } catch (error) {
         res.status(500).json({ 
             status: 'error', 
             message: 'ERPNext connection failed', 
-            error: error.response?.data || error.message
+            error: error.response?.data || error.message,
+            timestamp: new Date().toISOString()
         });
     }
 });
@@ -1062,23 +2141,43 @@ app.get('/test-dotorders-erp', async (req, res) => {
 // Session management endpoint
 app.get('/sessions', (req, res) => {
     const sessions = Array.from(userSessions.entries()).map(([phone, session]) => ({
-        phone: phone.substring(0, 8) + '****', // Mask phone numbers for privacy
+        phone: phone.substring(0, 8) + '****',
         state: session.state,
         hasOrder: !!session.orderInProgress,
-        lastActivity: new Date(session.lastActivity).toISOString()
+        conversationLength: session.conversationHistory?.length || 0,
+        lastActivity: new Date(session.lastActivity).toISOString(),
+        nlpContext: session.nlpContext?.lastIntent || null
     }));
     
     res.json({
         totalSessions: userSessions.size,
+        nlpAvailable: nlpAvailable,
+        nlpReady: nlpReady,
         sessions: sessions
     });
 });
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`Enhanced Water Delivery Bot running on port ${PORT}`);
-    console.log('Features: Customer Service + Order Management + ERPNext Integration');
-    console.log(`Server URL: http://localhost:${PORT}`);
+    console.log(`?? ${nlpAvailable ? 'AI-Enhanced ' : ''}Water Delivery Bot starting on port ${PORT}`);
+    console.log(`?? Features: ${nlpAvailable ? 'NLP + ' : ''}Customer Service + Order Management + ERPNext Integration`);
+    console.log(`?? Server URL: http://localhost:${PORT}`);
+    if (nlpAvailable) {
+        console.log(`?? NLP Dashboard: http://localhost:${PORT}/nlp-dashboard`);
+    } else {
+        console.log(`? To enable AI: npm install node-nlp && restart server`);
+    }
     
     startKeepAlive();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('?? Received SIGTERM, shutting down gracefully');
+    process.exit(0);
+});
+
+process.on('SIGINT', () => {
+    console.log('?? Received SIGINT, shutting down gracefully'); 
+    process.exit(0);
 });
