@@ -635,7 +635,7 @@ async function createERPOrder(orderInfo, customerName) {
             order_type: 'Sales',
             delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
             items: [{
-                item_code: orderInfo.productKey,
+                item_code: '5 Gallon Filled', // All products map to this single registered item
                 item_name: orderInfo.product.name,
                 description: orderInfo.product.description,
                 qty: orderInfo.quantity,
@@ -650,7 +650,7 @@ async function createERPOrder(orderInfo, customerName) {
         // If there's a deposit, add it as a separate line item
         if (orderInfo.product.deposit > 0) {
             orderData.items.push({
-                item_code: 'BOTTLE_DEPOSIT',
+                item_code: '5 Gallon Filled', // Use same item code for deposit
                 item_name: 'Bottle Deposit',
                 description: 'Refundable bottle deposit',
                 qty: orderInfo.quantity,
