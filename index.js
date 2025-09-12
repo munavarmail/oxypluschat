@@ -37,13 +37,13 @@ const PRODUCTS = {
 const KNOWLEDGE_BASE = {
     greetings: {
         keywords: ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'],
-        response: `Hello! Welcome to our water delivery service! ??
+        response: `Hello! Welcome to our water delivery service!
 
 I can help you with:
-?? Product information & pricing
-?? Place orders
-?? Delivery scheduling
-? Answer your questions
+- Product information & pricing
+- Place orders
+- Delivery scheduling
+- Answer your questions
 
 *How can I assist you today?*
 
@@ -52,23 +52,23 @@ Type "menu" to see our products or ask me anything!`
     
     menu: {
         keywords: ['menu', 'products', 'catalog', 'price list', 'what do you sell'],
-        response: `*??? OUR PRODUCTS & SERVICES*
+        response: `*OUR PRODUCTS & SERVICES*
 
-*?? WATER BOTTLES*
+*WATER BOTTLES*
 • Single Bottle - AED 7 (+15 deposit)
 • Trial Bottle - AED 7 (+15 deposit)
 
-*?? EQUIPMENT*
+*EQUIPMENT*
 • Table Top Dispenser - AED 25
 • Hand Pump - AED 15
 • Premium Water Cooler - AED 300 (1-year warranty)
 
-*?? COUPON BOOKS*
+*COUPON BOOKS*
 • 10+1 Coupon Book - AED 70 (no deposit for 3 bottles)
 • 100+40 Coupon Book - AED 700 (no deposit for 5 bottles, BNPL available)
 • 140 Bottles + Dispenser Package - AED 920
 
-*?? DELIVERY AREAS*
+*DELIVERY AREAS*
 Dubai, Sharjah, Ajman (except freezones)
 
 Type "order [product]" to place an order
@@ -77,11 +77,11 @@ Example: "order single bottle"`
 
     coupon_info: {
         keywords: ['coupon', 'coupon book', 'what is coupon', 'benefits', 'bnpl', 'buy now pay later'],
-        response: `*?? COUPON BOOK SYSTEM*
+        response: `*COUPON BOOK SYSTEM*
 
 A coupon represents one bottle. Give coupons to delivery person = get bottles!
 
-*? BENEFITS:*
+*BENEFITS:*
 • No bottle deposit (save AED 15/bottle)
 • Prioritized delivery
 • Out-of-schedule delivery possible
@@ -89,11 +89,11 @@ A coupon represents one bottle. Give coupons to delivery person = get bottles!
 • No cash payment hassle
 • Better price per bottle
 
-*?? AVAILABLE BOOKS:*
+*AVAILABLE BOOKS:*
 • 10+1 Book (AED 70) - up to 3 bottles without deposit
 • 100+40 Book (AED 700) - up to 5 bottles without deposit
 
-*?? BUY NOW PAY LATER:*
+*BUY NOW PAY LATER:*
 Available ONLY for 100+40 Coupon Book
 
 Would you like to order a coupon book?`
@@ -101,21 +101,21 @@ Would you like to order a coupon book?`
 
     delivery: {
         keywords: ['delivery', 'schedule', 'when', 'how long', 'timing', 'areas'],
-        response: `*?? DELIVERY INFORMATION*
+        response: `*DELIVERY INFORMATION*
 
-*?? COVERAGE AREAS:*
+*COVERAGE AREAS:*
 Dubai, Sharjah, Ajman (except freezones)
 
-*? SCHEDULING:*
+*SCHEDULING:*
 • Message us on WhatsApp for delivery
 • We'll set a weekly scheduled day
 • Urgent/out-of-schedule requests accommodated
 
-*?? DELIVERY CHARGES:*
+*DELIVERY CHARGES:*
 • FREE with coupon books
 • Standard charges for individual bottles
 
-*?? TO SCHEDULE:*
+*TO SCHEDULE:*
 Just tell me what you need and your location!
 
 Would you like to place an order now?`
@@ -123,17 +123,17 @@ Would you like to place an order now?`
 
     payment: {
         keywords: ['payment', 'pay', 'cash', 'card', 'bank transfer', 'installment'],
-        response: `*?? PAYMENT METHODS*
+        response: `*PAYMENT METHODS*
 
 We accept:
-• ?? Cash
-• ?? Card payment (subject to availability)
-• ?? Bank transfer
+• Cash
+• Card payment (subject to availability)
+• Bank transfer
 
-*?? INSTALLMENT OPTIONS:*
+*INSTALLMENT OPTIONS:*
 Buy Now Pay Later available ONLY for 100+40 Coupon Book
 
-*?? PRICING:*
+*PRICING:*
 • Base price: AED 7/bottle
 • With coupon books: As low as AED 5/bottle
 
@@ -142,27 +142,27 @@ Ready to place an order?`
 
     equipment: {
         keywords: ['dispenser', 'cooler', 'equipment', 'table top', 'hand pump', 'warranty'],
-        response: `*?? EQUIPMENT AVAILABLE*
+        response: `*EQUIPMENT AVAILABLE*
 
-*?? DISPENSERS:*
+*DISPENSERS:*
 • Table Top Dispenser - AED 25
 • Hand Pump - AED 15
 • Premium Water Cooler - AED 300
 
-*? WARRANTY:*
+*WARRANTY:*
 Premium cooler comes with 1-year warranty from Geo General
 
-*?? WHY WE CHARGE:*
+*WHY WE CHARGE:*
 We believe in transparent pricing instead of hiding costs in bottle prices like others do.
 
-*?? PACKAGE DEAL:*
+*PACKAGE DEAL:*
 140 Bottles + Premium Dispenser = AED 920
 
 Would you like to order any equipment?`
     }
 };
 
-// Keep-alive functions (keeping original)
+// Keep-alive functions
 async function keepAlive() {
     if (!KEEP_ALIVE_URL) {
         console.log('KEEP_ALIVE_URL not set - skipping keep-alive ping');
@@ -174,24 +174,24 @@ async function keepAlive() {
             timeout: 30000,
             headers: { 'User-Agent': 'KeepAlive-Bot/1.0' }
         });
-        console.log(`? Keep-alive ping successful at ${new Date().toISOString()} - Status: ${response.status}`);
+        console.log(`Keep-alive ping successful at ${new Date().toISOString()} - Status: ${response.status}`);
     } catch (error) {
-        console.error(`? Keep-alive ping failed at ${new Date().toISOString()}:`, error.message);
+        console.error(`Keep-alive ping failed at ${new Date().toISOString()}:`, error.message);
     }
 }
 
 function startKeepAlive() {
     if (!KEEP_ALIVE_URL) {
-        console.log('??  KEEP_ALIVE_URL not configured - server may sleep on free hosting plans');
+        console.log('KEEP_ALIVE_URL not configured - server may sleep on free hosting plans');
         return;
     }
     
-    console.log(`?? Starting keep-alive service - pinging every ${KEEP_ALIVE_INTERVAL / 60000} minutes`);
+    console.log(`Starting keep-alive service - pinging every ${KEEP_ALIVE_INTERVAL / 60000} minutes`);
     setTimeout(keepAlive, 2 * 60 * 1000);
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// Enhanced health check endpoint
+// Health check endpoint
 app.get('/health', (req, res) => {
     const healthData = {
         status: 'healthy',
@@ -203,11 +203,11 @@ app.get('/health', (req, res) => {
         activeSessions: userSessions.size
     };
     
-    console.log(`?? Health check called from ${req.ip} at ${healthData.timestamp}`);
+    console.log(`Health check called from ${req.ip} at ${healthData.timestamp}`);
     res.status(200).json(healthData);
 });
 
-// Webhook verification (keeping original)
+// Webhook verification
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -221,7 +221,7 @@ app.get('/webhook', (req, res) => {
     }
 });
 
-// Enhanced webhook to receive messages
+// Webhook to receive messages
 app.post('/webhook', (req, res) => {
     const body = req.body;
     
@@ -246,7 +246,7 @@ app.post('/webhook', (req, res) => {
     }
 });
 
-// Enhanced message handling with conversation state
+// Handle incoming messages with conversation state
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
@@ -316,12 +316,12 @@ async function generateEnhancedResponse(message, session, userPhone) {
     
     // Fallback responses
     if (lowerMessage.includes('help')) {
-        return `*?? HOW I CAN HELP*
+        return `*HOW I CAN HELP*
 
-?? Type "menu" - See all products
-?? Type "order [product]" - Place an order
-?? Send mobile number - Get customer details
-? Ask about delivery, pricing, coupons
+Type "menu" - See all products
+Type "order [product]" - Place an order
+Send mobile number - Get customer details
+Ask about delivery, pricing, coupons
 
 *Example orders:*
 • "order single bottle"
@@ -334,10 +334,10 @@ What would you like to do?`;
     return `I understand you're asking about: "${message}"
 
 I can help you with:
-?? Product orders - Type "order [product name]"
-?? Product information - Type "menu"
-?? Delivery information - Ask about delivery
-?? Payment options - Ask about payment
+- Product orders - Type "order [product name]"
+- Product information - Type "menu"
+- Delivery information - Ask about delivery
+- Payment options - Ask about payment
 
 *Or send a mobile number to look up customer details*
 
@@ -365,7 +365,7 @@ async function handleOrderCommand(message, session, userPhone) {
     }
     
     if (!selectedProduct) {
-        return `*? Product not found*
+        return `*PRODUCT NOT FOUND*
 
 Available products:
 ${Object.entries(PRODUCTS).map(([key, product]) => 
@@ -390,12 +390,12 @@ ${Object.entries(PRODUCTS).map(([key, product]) =>
     // Check if we need address
     if (customerInfo.includes('CUSTOMER NOT FOUND') || !customerInfo.includes('ADDRESS:')) {
         session.state = 'collecting_address';
-        return `*?? ORDER STARTED*
+        return `*ORDER STARTED*
 
 Product: ${selectedProduct.name}
 Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` (+${selectedProduct.deposit} deposit)` : ''}
 
-*?? Please provide your delivery address:*
+*Please provide your delivery address:*
 Include building name, area, and any specific directions.`;
     } else {
         session.state = 'confirming_order';
@@ -407,7 +407,7 @@ Include building name, area, and any specific directions.`;
 async function generateOrderConfirmation(orderInfo) {
     const total = orderInfo.product.price + orderInfo.product.deposit;
     
-    return `*?? ORDER CONFIRMATION*
+    return `*ORDER CONFIRMATION*
 
 *Product:* ${orderInfo.product.name}
 *Description:* ${orderInfo.product.description}
@@ -415,10 +415,10 @@ async function generateOrderConfirmation(orderInfo) {
 ${orderInfo.product.deposit > 0 ? `*Deposit:* AED ${orderInfo.product.deposit}` : ''}
 *Total:* AED ${total}
 
-*?? Delivery Address:*
+*Delivery Address:*
 ${orderInfo.address || 'Using address on file'}
 
-*?? Payment:* Cash/Card on delivery
+*Payment:* Cash/Card on delivery
 
 *Confirm your order?*
 Reply "YES" to confirm or "NO" to cancel.`;
@@ -429,48 +429,209 @@ async function processOrder(session, userPhone) {
     try {
         const orderInfo = session.orderInProgress;
         
+        // First, ensure customer exists in ERP
+        const customerResult = await ensureCustomerExists(orderInfo);
+        
+        if (!customerResult.success) {
+            return `*ORDER PROCESSING ERROR*
+
+${customerResult.message}
+
+Please try again or contact our support team for assistance.`;
+        }
+        
         // Create order in ERPNext
-        const erpOrder = await createERPOrder(orderInfo);
+        const erpOrder = await createERPOrder(orderInfo, customerResult.customerName);
         
         if (erpOrder.success) {
             session.state = 'greeting';
             session.orderInProgress = null;
             
-            return `*? ORDER CONFIRMED!*
+            return `*ORDER CONFIRMED*
 
 *Order ID:* ${erpOrder.orderName}
 *Product:* ${orderInfo.product.name}
 *Total:* AED ${orderInfo.product.price + orderInfo.product.deposit}
 
-*?? Next Steps:*
+*Next Steps:*
 Our delivery team will contact you within 2 hours to schedule delivery.
 
-*?? Delivery Areas:*
+*Delivery Areas:*
 Dubai, Sharjah, Ajman
 
-Thank you for choosing our service! ??`;
+Thank you for choosing our service!`;
         } else {
-            return `*? ORDER ERROR*
-
-Sorry, there was an issue creating your order. Please try again or contact support.
-
-Error: ${erpOrder.error}`;
+            return handleOrderError(erpOrder.error, erpOrder.errorType);
         }
         
     } catch (error) {
         console.error('Error processing order:', error);
-        return `*? ORDER ERROR*
+        return `*ORDER PROCESSING ERROR*
 
-Sorry, there was a technical issue. Please try again or contact our support team.`;
+There was a technical issue while processing your order. Our team has been notified.
+
+Please try again in a few minutes or contact support directly.`;
     }
 }
 
+// Ensure customer exists in ERP, create if necessary
+async function ensureCustomerExists(orderInfo) {
+    try {
+        // First try to find existing customer
+        const searchUrl = `${DOTORDERS_ERP_URL}/api/resource/Customer`;
+        
+        const response = await axios.get(searchUrl, {
+            headers: {
+                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([['mobile_no', '=', orderInfo.customerPhone]]),
+                fields: JSON.stringify(['name', 'customer_name'])
+            }
+        });
+        
+        if (response.data.data && response.data.data.length > 0) {
+            // Customer exists
+            return {
+                success: true,
+                customerName: response.data.data[0].name,
+                message: 'Customer found'
+            };
+        } else {
+            // Customer doesn't exist, create new one
+            return await createERPCustomer(orderInfo);
+        }
+        
+    } catch (error) {
+        console.error('Error checking customer existence:', error);
+        return {
+            success: false,
+            message: 'Unable to verify customer information. Please contact support.'
+        };
+    }
+}
+
+// Create new customer in ERP
+async function createERPCustomer(orderInfo) {
+    try {
+        const customerData = {
+            doctype: 'Customer',
+            customer_name: `Customer ${orderInfo.customerPhone}`,
+            mobile_no: orderInfo.customerPhone,
+            customer_type: 'Individual',
+            customer_group: 'Individual',
+            territory: 'UAE'
+        };
+        
+        const response = await axios.post(
+            `${DOTORDERS_ERP_URL}/api/resource/Customer`,
+            customerData,
+            {
+                headers: {
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        // Create address for the customer if provided
+        if (orderInfo.address) {
+            await createCustomerAddress(response.data.data.name, orderInfo);
+        }
+        
+        return {
+            success: true,
+            customerName: response.data.data.name,
+            message: 'New customer created successfully'
+        };
+        
+    } catch (error) {
+        console.error('Error creating customer:', error);
+        return {
+            success: false,
+            message: 'Unable to create customer profile. Please provide your details to our support team.'
+        };
+    }
+}
+
+// Create customer address
+async function createCustomerAddress(customerName, orderInfo) {
+    try {
+        const addressData = {
+            doctype: 'Address',
+            address_title: 'Delivery Address',
+            address_line1: orderInfo.address,
+            city: 'UAE',
+            country: 'United Arab Emirates',
+            links: [{
+                link_doctype: 'Customer',
+                link_name: customerName
+            }]
+        };
+        
+        await axios.post(
+            `${DOTORDERS_ERP_URL}/api/resource/Address`,
+            addressData,
+            {
+                headers: {
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+    } catch (error) {
+        console.error('Error creating address:', error);
+        // Don't fail the order for address creation issues
+    }
+}
+
+// Handle different types of order errors
+function handleOrderError(error, errorType) {
+    if (typeof error === 'string' && error.includes('Customer') && error.includes('not found')) {
+        return `*CUSTOMER ACCOUNT ISSUE*
+
+We couldn't find your customer account in our system. This has been resolved.
+
+Please try placing your order again, and your account will be created automatically.`;
+    }
+    
+    if (typeof error === 'string' && error.includes('Item') && error.includes('not found')) {
+        return `*PRODUCT UNAVAILABLE*
+
+The requested product is temporarily unavailable in our system.
+
+Please contact our support team or try ordering a different product.`;
+    }
+    
+    if (typeof error === 'string' && error.includes('permission')) {
+        return `*SYSTEM MAINTENANCE*
+
+Our ordering system is currently undergoing maintenance.
+
+Please try again in a few minutes or contact our team directly for immediate assistance.`;
+    }
+    
+    // Generic error with more helpful guidance
+    return `*ORDER PROCESSING ISSUE*
+
+We encountered a technical issue while processing your order.
+
+*What you can do:*
+• Try placing the order again in a few minutes
+• Contact our support team directly
+• Send us your details manually
+
+Our team has been notified and will resolve this quickly.`;
+}
+
 // Create order in ERPNext
-async function createERPOrder(orderInfo) {
+async function createERPOrder(orderInfo, customerName) {
     try {
         const orderData = {
             doctype: 'Sales Order',
-            customer: orderInfo.customerPhone, // Will need to create customer if doesn't exist
+            customer: customerName,
             order_type: 'Sales',
             delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
             items: [{
@@ -517,9 +678,39 @@ async function createERPOrder(orderInfo) {
         
     } catch (error) {
         console.error('ERP Order creation failed:', error.response?.data || error.message);
+        
+        // Parse error details for better user messaging
+        let errorMessage = error.message;
+        let errorType = 'general';
+        
+        if (error.response?.data) {
+            const errorData = error.response.data;
+            
+            // Extract meaningful error message
+            if (errorData.message) {
+                errorMessage = errorData.message;
+            } else if (errorData.exc_type) {
+                errorType = errorData.exc_type;
+                
+                // Try to extract server messages
+                if (errorData.server_messages) {
+                    try {
+                        const serverMessages = JSON.parse(errorData.server_messages);
+                        if (Array.isArray(serverMessages) && serverMessages.length > 0) {
+                            const parsedMessage = JSON.parse(serverMessages[0]);
+                            errorMessage = parsedMessage.message || errorMessage;
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing server messages:', parseError);
+                    }
+                }
+            }
+        }
+        
         return {
             success: false,
-            error: error.response?.data?.message || error.message
+            error: errorMessage,
+            errorType: errorType
         };
     }
 }
@@ -551,7 +742,12 @@ async function getCustomerByMobile(mobileNumber) {
             const addressInfo = await getCustomerAddress(customer.customer_primary_address || customer.name);
             const customDocsInfo = await getCustomDocuments(customer.name);
             
-            let response = `*? CUSTOMER FOUND*\n\n*Name:* ${customer.customer_name}\n*Mobile:* ${customer.mobile_no}\n\n${addressInfo}`;
+            let response = `*CUSTOMER FOUND*
+
+*Name:* ${customer.customer_name}
+*Mobile:* ${customer.mobile_no}
+
+${addressInfo}`;
             
             if (customDocsInfo) {
                 response += `${customDocsInfo}`;
@@ -782,7 +978,7 @@ app.get('/', (req, res) => {
         <title>WhatsApp Water Delivery Bot</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px10px rgba(0,0,0,0.1); }
             .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
             .endpoint { margin: 10px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #007bff; }
             .active { color: #28a745; font-weight: bold; }
@@ -795,7 +991,7 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>?? WhatsApp Water Delivery Bot</h1>
+            <h1>WhatsApp Water Delivery Bot</h1>
             <div class="status">
                 <h2>Server Status: <span class="active">RUNNING</span></h2>
                 <p><strong>Version:</strong> 2.0.0 (Enhanced with Order Management)</p>
@@ -819,7 +1015,7 @@ app.get('/', (req, res) => {
                 </div>
             </div>
             
-            <h3>?? Available Endpoints:</h3>
+            <h3>Available Endpoints:</h3>
             <div class="endpoint"><strong>/health</strong> - Health check and system status</div>
             <div class="endpoint"><strong>/keep-alive-status</strong> - Keep-alive configuration</div>
             <div class="endpoint"><strong>/test-dotorders-erp</strong> - Test ERPNext connection</div>
@@ -827,15 +1023,15 @@ app.get('/', (req, res) => {
             <div class="endpoint"><strong>/debug-customer</strong> - Debug customer data structure</div>
             <div class="endpoint"><strong>/debug-mobile/:number</strong> - Debug mobile number search</div>
             
-            <h3>?? Bot Capabilities:</h3>
+            <h3>Bot Capabilities:</h3>
             <ul>
-                <li>? Customer query handling with knowledge base</li>
-                <li>? Product catalog and pricing information</li>
-                <li>? Order placement and confirmation</li>
-                <li>? ERPNext integration for order management</li>
-                <li>? Customer lookup by mobile number</li>
-                <li>? Conversation state management</li>
-                <li>? Automatic session cleanup</li>
+                <li>Customer query handling with knowledge base</li>
+                <li>Product catalog and pricing information</li>
+                <li>Order placement and confirmation</li>
+                <li>ERPNext integration for order management</li>
+                <li>Customer lookup by mobile number</li>
+                <li>Conversation state management</li>
+                <li>Automatic session cleanup</li>
             </ul>
         </div>
     </body>
@@ -844,7 +1040,7 @@ app.get('/', (req, res) => {
     res.send(statusHtml);
 });
 
-// Additional debug endpoints (keeping originals)
+// Test ERPNext connection endpoint
 app.get('/test-dotorders-erp', async (req, res) => {
     try {
         const response = await axios.get(`${DOTORDERS_ERP_URL}/api/method/frappe.auth.get_logged_user`, {
@@ -880,9 +1076,9 @@ app.get('/sessions', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log(`?? Enhanced Water Delivery Bot running on port ${PORT}`);
-    console.log('?? Features: Customer Service + Order Management + ERPNext Integration');
-    console.log(`?? Server URL: http://localhost:${PORT}`);
+    console.log(`Enhanced Water Delivery Bot running on port ${PORT}`);
+    console.log('Features: Customer Service + Order Management + ERPNext Integration');
+    console.log(`Server URL: http://localhost:${PORT}`);
     
     startKeepAlive();
 });
