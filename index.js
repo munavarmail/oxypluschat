@@ -561,7 +561,11 @@ async function getCustomerByMobile(mobileNumber) {
             
         } else {
             console.log(`No customer found for mobile: ${mobileNumber}`);
-            return `*? CUSTOMER NOT FOUND*\n\nNo customer found with mobile number: ${mobileNumber}\n\nWould you like to place a new order? I can help you get started!`;
+            return `*CUSTOMER NOT FOUND*
+
+No customer found with mobile number: ${mobileNumber}
+
+Would you like to place a new order? I can help you get started!`;
         }
         
     } catch (error) {
