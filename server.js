@@ -25,10 +25,491 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL;
 const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000;
 
+// ERP Configuration Check
+const DOTORDERS_ERP_URL = process.env.DOTORDERS_ERP_URL;
+const DOTORDERS_ERP_API_KEY = process.env.DOTORDERS_ERP_API_KEY;
+const DOTORDERS_ERP_API_SECRET = process.env.DOTORDERS_ERP_API_SECRET;
+
+// Debug logging system
+const debugLog = {
+    orders: [],
+    errors: [],
+    connections: [],
+    maxEntries: 50
+};
+
+function logDebug(category, message, data = null) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        message,
+        data,
+        level: 'INFO'
+    };
+    
+    if (!debugLog[category]) debugLog[category] = [];
+    debugLog[category].unshift(entry);
+    if (debugLog[category].length > debugLog.maxEntries) {
+        debugLog[category] = debugLog[category].slice(0, debugLog.maxEntries);
+    }
+    
+    console.log(`[DEBUG-${category.toUpperCase()}] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+}
+
+function logError(category, message, error = null) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        message,
+        error: error ? {
+            message: error.message,
+            stack: error.stack,
+            response: error.response?.data,
+            status: error.response?.status
+        } : null,
+        level: 'ERROR'
+    };
+    
+    if (!debugLog[category]) debugLog[category] = [];
+    debugLog[category].unshift(entry);
+    if (debugLog[category].length > debugLog.maxEntries) {
+        debugLog[category] = debugLog[category].slice(0, debugLog.maxEntries);
+    }
+    
+    console.error(`[ERROR-${category.toUpperCase()}] ${message}`, error);
+}
+
 // Initialize NLP on startup
 initializeNLP();
 
-// Keep-alive functions
+// Startup ERP connection test
+async function testERPOnStartup() {
+    try {
+        logDebug('connections', 'Testing ERP connection on startup...');
+        const result = await testERPConnection();
+        logDebug('connections', 'ERP connection successful on startup', result);
+        return true;
+    } catch (error) {
+        logError('connections', 'ERP connection failed on startup', error);
+        return false;
+    }
+}
+
+// Enhanced ERP connection test with detailed diagnostics
+app.get('/test-erp-detailed', async (req, res) => {
+    const diagnostics = {
+        timestamp: new Date().toISOString(),
+        environment: {
+            DOTORDERS_ERP_URL: DOTORDERS_ERP_URL ? 'SET' : 'MISSING',
+            DOTORDERS_ERP_API_KEY: DOTORDERS_ERP_API_KEY ? `${DOTORDERS_ERP_API_KEY.substring(0, 8)}...` : 'MISSING',
+            DOTORDERS_ERP_API_SECRET: DOTORDERS_ERP_API_SECRET ? `${DOTORDERS_ERP_API_SECRET.substring(0, 8)}...` : 'MISSING'
+        },
+        tests: []
+    };
+
+    try {
+        // Test 1: Environment variables
+        logDebug('connections', 'Testing ERP environment variables...');
+        if (!DOTORDERS_ERP_URL || !DOTORDERS_ERP_API_KEY || !DOTORDERS_ERP_API_SECRET) {
+            diagnostics.tests.push({
+                name: 'Environment Variables',
+                status: 'FAIL',
+                message: 'Missing required environment variables'
+            });
+        } else {
+            diagnostics.tests.push({
+                name: 'Environment Variables',
+                status: 'PASS',
+                message: 'All required variables present'
+            });
+        }
+
+        // Test 2: Basic connectivity
+        logDebug('connections', 'Testing basic ERP connectivity...');
+        try {
+            const pingResponse = await axios.get(`${DOTORDERS_ERP_URL}/api/method/ping`, {
+                timeout: 10000,
+                headers: {
+                    'User-Agent': 'WhatsApp-Bot/1.0'
+                }
+            });
+            diagnostics.tests.push({
+                name: 'Basic Connectivity',
+                status: 'PASS',
+                message: `Server responded with status ${pingResponse.status}`
+            });
+        } catch (error) {
+            diagnostics.tests.push({
+                name: 'Basic Connectivity',
+                status: 'FAIL',
+                message: `Connection failed: ${error.message}`,
+                error: {
+                    code: error.code,
+                    status: error.response?.status,
+                    statusText: error.response?.statusText
+                }
+            });
+        }
+
+        // Test 3: Authentication
+        logDebug('connections', 'Testing ERP authentication...');
+        try {
+            const authResponse = await axios.get(`${DOTORDERS_ERP_URL}/api/method/frappe.auth.get_logged_user`, {
+                timeout: 10000,
+                headers: {
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            diagnostics.tests.push({
+                name: 'Authentication',
+                status: 'PASS',
+                message: 'Authentication successful',
+                user: authResponse.data.message
+            });
+        } catch (error) {
+            diagnostics.tests.push({
+                name: 'Authentication',
+                status: 'FAIL',
+                message: `Auth failed: ${error.message}`,
+                error: {
+                    status: error.response?.status,
+                    data: error.response?.data
+                }
+            });
+        }
+
+        // Test 4: Customer API access
+        logDebug('connections', 'Testing Customer API access...');
+        try {
+            const customerResponse = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Customer`, {
+                timeout: 10000,
+                headers: {
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    limit: 1
+                }
+            });
+            diagnostics.tests.push({
+                name: 'Customer API',
+                status: 'PASS',
+                message: `Customer API accessible, ${customerResponse.data.data?.length || 0} records found`
+            });
+        } catch (error) {
+            diagnostics.tests.push({
+                name: 'Customer API',
+                status: 'FAIL',
+                message: `Customer API failed: ${error.message}`,
+                error: {
+                    status: error.response?.status,
+                    data: error.response?.data
+                }
+            });
+        }
+
+        // Test 5: Sales Order API access
+        logDebug('connections', 'Testing Sales Order API access...');
+        try {
+            const soResponse = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Sales Order`, {
+                timeout: 10000,
+                headers: {
+                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    limit: 1
+                }
+            });
+            diagnostics.tests.push({
+                name: 'Sales Order API',
+                status: 'PASS',
+                message: `Sales Order API accessible, ${soResponse.data.data?.length || 0} records found`
+            });
+        } catch (error) {
+            diagnostics.tests.push({
+                name: 'Sales Order API',
+                status: 'FAIL',
+                message: `Sales Order API failed: ${error.message}`,
+                error: {
+                    status: error.response?.status,
+                    data: error.response?.data
+                }
+            });
+        }
+
+        logDebug('connections', 'ERP detailed test completed', diagnostics);
+        res.json(diagnostics);
+
+    } catch (error) {
+        logError('connections', 'ERP detailed test error', error);
+        res.status(500).json({
+            error: 'Test execution failed',
+            message: error.message
+        });
+    }
+});
+
+// Test order creation directly
+app.post('/test-order-creation', async (req, res) => {
+    try {
+        const testOrderData = req.body || {
+            product: PRODUCTS.single_bottle,
+            productKey: 'single_bottle',
+            quantity: 1,
+            customerPhone: '+971501234567',
+            address: 'Test Address, Dubai Marina, Dubai'
+        };
+
+        logDebug('orders', 'Testing order creation', testOrderData);
+
+        const result = await createOrder(testOrderData);
+        
+        logDebug('orders', 'Order creation test result', result);
+
+        res.json({
+            success: true,
+            testData: testOrderData,
+            result: result,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logError('orders', 'Order creation test failed', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// Enhanced webhook to receive messages with detailed logging
+app.post('/webhook', (req, res) => {
+    const body = req.body;
+    
+    logDebug('webhook', 'Received webhook', {
+        object: body.object,
+        entryCount: body.entry?.length
+    });
+    
+    if (body.object === 'whatsapp_business_account') {
+        body.entry.forEach(entry => {
+            const changes = entry.changes;
+            changes.forEach(change => {
+                if (change.field === 'messages') {
+                    const messages = change.value.messages;
+                    if (messages) {
+                        messages.forEach(message => {
+                            logDebug('messages', 'Processing incoming message', {
+                                from: message.from,
+                                type: message.type,
+                                hasText: !!message.text?.body
+                            });
+                            handleIncomingMessage(message, change.value.metadata.phone_number_id);
+                        });
+                    }
+                }
+            });
+        });
+        res.status(200).send('ok');
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+// Enhanced message handling with detailed logging
+async function handleIncomingMessage(message, phoneNumberId) {
+    const from = message.from;
+    const messageBody = message.text?.body;
+    
+    if (messageBody) {
+        try {
+            logDebug('messages', 'Handling message', {
+                from: from,
+                message: messageBody,
+                phoneNumberId: phoneNumberId
+            });
+
+            const response = await handleMessage(from, messageBody);
+            
+            logDebug('messages', 'Generated response', {
+                from: from,
+                responseLength: response.length,
+                containsOrder: response.includes('ORDER')
+            });
+
+            await sendMessage(from, response, phoneNumberId);
+            
+            logDebug('messages', 'Message handling completed successfully', {
+                from: from
+            });
+
+        } catch (error) {
+            logError('messages', 'Message handling failed', error);
+            await sendMessage(from, "I apologize, but I encountered a technical issue. Please try again or contact our support team.", phoneNumberId);
+        }
+    }
+}
+
+// Enhanced message sending with logging
+async function sendMessage(to, message, phoneNumberId) {
+    try {
+        logDebug('messages', 'Sending WhatsApp message', {
+            to: to,
+            messageLength: message.length,
+            phoneNumberId: phoneNumberId
+        });
+
+        await axios.post(
+            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+            {
+                messaging_product: 'whatsapp',
+                to: to,
+                text: { body: message }
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        logDebug('messages', 'Message sent successfully', { to: to });
+    } catch (error) {
+        logError('messages', 'Failed to send message', error);
+    }
+}
+
+// Debug logs endpoint
+app.get('/debug-logs', (req, res) => {
+    const category = req.query.category;
+    const limit = parseInt(req.query.limit) || 20;
+    
+    if (category && debugLog[category]) {
+        res.json({
+            category: category,
+            entries: debugLog[category].slice(0, limit)
+        });
+    } else {
+        res.json({
+            categories: Object.keys(debugLog),
+            summary: Object.keys(debugLog).reduce((acc, key) => {
+                acc[key] = debugLog[key].length;
+                return acc;
+            }, {}),
+            recentErrors: debugLog.errors?.slice(0, 5) || []
+        });
+    }
+});
+
+// Debug dashboard
+app.get('/debug-dashboard', (req, res) => {
+    const dashboardHtml = generateDebugDashboard();
+    res.send(dashboardHtml);
+});
+
+function generateDebugDashboard() {
+    const recentOrders = debugLog.orders?.slice(0, 5) || [];
+    const recentErrors = debugLog.errors?.slice(0, 5) || [];
+    const recentConnections = debugLog.connections?.slice(0, 5) || [];
+    
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ERPNext Debug Dashboard</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f5f5f5; }
+            .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+            .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+            .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .status { padding: 10px; border-radius: 5px; margin: 5px 0; }
+            .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+            .warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+            .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 5px; }
+            .btn:hover { background: #0056b3; }
+            .log-entry { background: #f8f9fa; border-left: 4px solid #007bff; padding: 10px; margin: 5px 0; border-radius: 3px; }
+            .log-entry.error { border-left-color: #dc3545; }
+            .log-time { font-size: 0.8em; color: #666; }
+            pre { background: #2c3e50; color: white; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        </style>
+        <meta http-equiv="refresh" content="30">
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>ERPNext Integration Debug Dashboard</h1>
+                <p>Real-time monitoring of ERP sync operations</p>
+            </div>
+            
+            <div class="cards">
+                <div class="card">
+                    <h3>System Status</h3>
+                    <div class="status ${DOTORDERS_ERP_URL ? 'success' : 'error'}">
+                        ERP URL: ${DOTORDERS_ERP_URL ? 'Configured' : 'Missing'}
+                    </div>
+                    <div class="status ${DOTORDERS_ERP_API_KEY ? 'success' : 'error'}">
+                        API Key: ${DOTORDERS_ERP_API_KEY ? 'Configured' : 'Missing'}
+                    </div>
+                    <div class="status ${DOTORDERS_ERP_API_SECRET ? 'success' : 'error'}">
+                        API Secret: ${DOTORDERS_ERP_API_SECRET ? 'Configured' : 'Missing'}
+                    </div>
+                    <a href="/test-erp-detailed" class="btn">Test ERP Connection</a>
+                    <a href="/test-order-creation" class="btn">Test Order Creation</a>
+                </div>
+                
+                <div class="card">
+                    <h3>Recent Orders (${debugLog.orders?.length || 0})</h3>
+                    ${recentOrders.map(entry => `
+                        <div class="log-entry">
+                            <div class="log-time">${new Date(entry.timestamp).toLocaleString()}</div>
+                            <div>${entry.message}</div>
+                            ${entry.data ? `<pre>${JSON.stringify(entry.data, null, 2).substring(0, 200)}...</pre>` : ''}
+                        </div>
+                    `).join('') || '<p>No order logs yet</p>'}
+                </div>
+                
+                <div class="card">
+                    <h3>Recent Errors (${debugLog.errors?.length || 0})</h3>
+                    ${recentErrors.map(entry => `
+                        <div class="log-entry error">
+                            <div class="log-time">${new Date(entry.timestamp).toLocaleString()}</div>
+                            <div><strong>${entry.message}</strong></div>
+                            ${entry.error ? `<pre>${JSON.stringify(entry.error, null, 2).substring(0, 300)}...</pre>` : ''}
+                        </div>
+                    `).join('') || '<p>No errors logged</p>'}
+                </div>
+                
+                <div class="card">
+                    <h3>Connection Tests (${debugLog.connections?.length || 0})</h3>
+                    ${recentConnections.map(entry => `
+                        <div class="log-entry ${entry.level === 'ERROR' ? 'error' : ''}">
+                            <div class="log-time">${new Date(entry.timestamp).toLocaleString()}</div>
+                            <div>${entry.message}</div>
+                            ${entry.data ? `<pre>${JSON.stringify(entry.data, null, 2).substring(0, 200)}...</pre>` : ''}
+                        </div>
+                    `).join('') || '<p>No connection logs yet</p>'}
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h3>Quick Actions</h3>
+                <a href="/debug-logs" class="btn">View All Logs</a>
+                <a href="/debug-logs?category=orders" class="btn">Order Logs</a>
+                <a href="/debug-logs?category=errors" class="btn">Error Logs</a>
+                <a href="/sessions" class="btn">Active Sessions</a>
+                <a href="/health" class="btn">Health Check</a>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+// Keep-alive functions (unchanged)
 async function keepAlive() {
     if (!KEEP_ALIVE_URL) {
         console.log('KEEP_ALIVE_URL not set - skipping keep-alive ping');
@@ -57,10 +538,19 @@ function startKeepAlive() {
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// Health check endpoint
-app.get('/health', (req, res) => {
+// Enhanced health check with ERP status
+app.get('/health', async (req, res) => {
     const businessData = getBusinessData();
     const nlpStatus = getNLPStatus();
+    
+    let erpStatus = 'unknown';
+    try {
+        await testERPConnection();
+        erpStatus = 'connected';
+    } catch (error) {
+        erpStatus = 'disconnected';
+        logError('health', 'ERP health check failed', error);
+    }
     
     const healthData = {
         status: 'healthy',
@@ -71,14 +561,20 @@ app.get('/health', (req, res) => {
         version: nlpStatus.nlpAvailable ? '3.0.0-NLP' : '2.0.0-Basic',
         activeSessions: businessData.activeSessions,
         nlpStatus: nlpStatus.nlpAvailable ? (nlpStatus.nlpReady ? 'ready' : 'training') : 'not_available',
-        nlpQueries: nlpStatus.totalQueries
+        nlpQueries: nlpStatus.totalQueries,
+        erpStatus: erpStatus,
+        debugLogCounts: {
+            orders: debugLog.orders?.length || 0,
+            errors: debugLog.errors?.length || 0,
+            connections: debugLog.connections?.length || 0
+        }
     };
     
-    console.log(`Health check called from ${req.ip} at ${healthData.timestamp}`);
+    logDebug('health', 'Health check performed', { erpStatus, activeSessions: businessData.activeSessions });
     res.status(200).json(healthData);
 });
 
-// Webhook verification
+// Webhook verification (unchanged)
 app.get('/webhook', (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
@@ -92,74 +588,9 @@ app.get('/webhook', (req, res) => {
     }
 });
 
-// Webhook to receive messages
-app.post('/webhook', (req, res) => {
-    const body = req.body;
-    
-    if (body.object === 'whatsapp_business_account') {
-        body.entry.forEach(entry => {
-            const changes = entry.changes;
-            changes.forEach(change => {
-                if (change.field === 'messages') {
-                    const messages = change.value.messages;
-                    if (messages) {
-                        messages.forEach(message => {
-                            console.log('?? Received message:', message);
-                            handleIncomingMessage(message, change.value.metadata.phone_number_id);
-                        });
-                    }
-                }
-            });
-        });
-        res.status(200).send('ok');
-    } else {
-        res.status(404).send('Not found');
-    }
-});
-
-// Handle incoming WhatsApp messages
-async function handleIncomingMessage(message, phoneNumberId) {
-    const from = message.from;
-    const messageBody = message.text?.body;
-    
-    if (messageBody) {
-        try {
-            const response = await handleMessage(from, messageBody);
-            await sendMessage(from, response, phoneNumberId);
-        } catch (error) {
-            console.error('Error handling message:', error);
-            await sendMessage(from, "I apologize, but I encountered a technical issue. Please try again or contact our support team.", phoneNumberId);
-        }
-    }
-}
-
-// Send WhatsApp message
-async function sendMessage(to, message, phoneNumberId) {
-    try {
-        await axios.post(
-            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
-            {
-                messaging_product: 'whatsapp',
-                to: to,
-                text: { body: message }
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        console.log('Message sent successfully');
-    } catch (error) {
-        console.error('Error sending message:', error.response?.data || error.message);
-    }
-}
-
-// NLP Testing endpoints (only if NLP is available)
+// All other existing endpoints remain the same...
 const nlpStatus = getNLPStatus();
 if (nlpStatus.nlpAvailable) {
-    // Test NLP endpoint
     app.get('/test-nlp/:message', async (req, res) => {
         try {
             const testMessage = decodeURIComponent(req.params.message);
@@ -193,23 +624,16 @@ if (nlpStatus.nlpAvailable) {
         }
     });
 
-    // NLP Analytics
     app.get('/nlp-analytics', (req, res) => {
         const analytics = getNLPAnalytics();
         res.json(analytics);
     });
-
-    // NLP Dashboard
-    app.get('/nlp-dashboard', (req, res) => {
-        const dashboardHtml = generateNLPDashboard();
-        res.send(dashboardHtml);
-    });
 }
 
-// Test ERP connection
 app.get('/test-dotorders-erp', async (req, res) => {
     try {
         const result = await testERPConnection();
+        logDebug('connections', 'Manual ERP test successful', result);
         res.json({
             status: 'success',
             message: 'ERPNext connection working!',
@@ -217,6 +641,7 @@ app.get('/test-dotorders-erp', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (error) {
+        logError('connections', 'Manual ERP test failed', error);
         res.status(500).json({
             status: 'error',
             message: 'ERPNext connection failed',
@@ -226,7 +651,6 @@ app.get('/test-dotorders-erp', async (req, res) => {
     }
 });
 
-// Session management
 app.get('/sessions', (req, res) => {
     const sessions = getUserSessions();
     res.json({
@@ -237,7 +661,6 @@ app.get('/sessions', (req, res) => {
     });
 });
 
-// Enhanced homepage
 app.get('/', (req, res) => {
     const businessData = getBusinessData();
     const analytics = getNLPAnalytics();
@@ -245,9 +668,8 @@ app.get('/', (req, res) => {
     res.send(statusHtml);
 });
 
-// HTML Generation Functions
 function generateHomepage(businessData, analytics) {
-    const avgResponseTime = analytics.responseTime.length > 0 
+    const avgResponseTime = analytics.responseTime?.length > 0 
         ? analytics.responseTime.reduce((a, b) => a + b, 0) / analytics.responseTime.length 
         : 0;
 
@@ -264,28 +686,35 @@ function generateHomepage(businessData, analytics) {
             .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
             .card { background: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
             .status { padding: 20px; background: linear-gradient(135deg, #4CAF50, #45a049); color: white; border-radius: 10px; margin-bottom: 20px; }
+            .debug-status { padding: 15px; background: linear-gradient(135deg, #FF9800, #F57C00); color: white; border-radius: 8px; margin-bottom: 15px; text-align: center; }
             .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
             .stat-box { padding: 20px; background: linear-gradient(135deg, #2196F3, #1976D2); color: white; border-radius: 10px; text-align: center; }
             .stat-box h3 { margin: 0; font-size: 2em; }
             .feature { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #2196F3; }
             .btn { display: inline-block; padding: 12px 24px; background: #2196F3; color: white; text-decoration: none; border-radius: 8px; margin: 5px; font-weight: bold; }
             .btn:hover { background: #1976D2; }
+            .btn.debug { background: #FF5722; }
+            .btn.debug:hover { background: #D84315; }
             .nlp-badge { background: ${nlpStatus.nlpAvailable ? '#4CAF50' : '#FF9800'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; }
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>?? ${nlpStatus.nlpAvailable ? 'AI-Powered ' : ''}Water Delivery Bot</h1>
-                <p>Advanced WhatsApp Business Integration ${nlpStatus.nlpAvailable ? 'with Natural Language Processing' : ''}</p>
+                <h1>${nlpStatus.nlpAvailable ? 'AI-Powered ' : ''}Water Delivery Bot</h1>
+                <p>Advanced WhatsApp Business Integration with ERPNext</p>
                 <div class="nlp-badge">${nlpStatus.nlpAvailable ? (nlpStatus.nlpReady ? 'NLP READY' : 'NLP TRAINING') : 'BASIC MODE'}</div>
             </div>
             
+            <div class="debug-status">
+                <strong>DEBUG MODE ENABLED</strong> - Enhanced logging and monitoring active
+            </div>
+            
             <div class="status">
-                <h2 style="margin: 0 0 10px 0;">?? System Status: RUNNING</h2>
-                <p><strong>Version:</strong> ${nlpStatus.nlpAvailable ? '3.0.0-NLP' : '2.0.0-Basic'} | 
+                <h2 style="margin: 0 0 10px 0;">System Status: RUNNING</h2>
+                <p><strong>Version:</strong> ${nlpStatus.nlpAvailable ? '3.0.0-NLP-DEBUG' : '2.0.0-Basic-DEBUG'} | 
                    <strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds | 
-                   <strong>Keep-alive:</strong> ${KEEP_ALIVE_URL ? 'ENABLED' : 'DISABLED'}</p>
+                   <strong>Debug Logs:</strong> ${debugLog.orders?.length || 0} orders, ${debugLog.errors?.length || 0} errors</p>
             </div>
             
             <div class="stats">
@@ -294,60 +723,47 @@ function generateHomepage(businessData, analytics) {
                     <p>Active Sessions</p>
                 </div>
                 <div class="stat-box">
+                    <h3>${debugLog.orders?.length || 0}</h3>
+                    <p>Order Attempts</p>
+                </div>
+                <div class="stat-box">
+                    <h3>${debugLog.errors?.length || 0}</h3>
+                    <p>Errors Logged</p>
+                </div>
+                <div class="stat-box">
                     <h3>${Object.keys(PRODUCTS).length}</h3>
                     <p>Products</p>
                 </div>
-                ${nlpStatus.nlpAvailable ? `
-                <div class="stat-box">
-                    <h3>${analytics.totalQueries}</h3>
-                    <p>NLP Queries</p>
-                </div>
-                <div class="stat-box">
-                    <h3>${Math.round(avgResponseTime)}ms</h3>
-                    <p>Avg Response</p>
-                </div>` : `
-                <div class="stat-box">
-                    <h3>${Object.keys(KNOWLEDGE_BASE).length}</h3>
-                    <p>Knowledge Categories</p>
-                </div>`}
             </div>
             
             <div class="cards">
-                ${nlpStatus.nlpAvailable ? `
                 <div class="card">
-                    <h3>?? AI Features</h3>
-                    <div class="feature">Natural Language Understanding</div>
-                    <div class="feature">Context-Aware Conversations</div>
-                    <div class="feature">Sentiment Analysis</div>
-                    <div class="feature">Smart Entity Extraction</div>
-                    <div class="feature">Intelligent Fallbacks</div>
-                    <a href="/nlp-dashboard" class="btn">?? Test NLP</a>
-                    <a href="/nlp-analytics" class="btn">?? Analytics</a>
-                </div>` : `
-                <div class="card">
-                    <h3>? Install AI Features</h3>
-                    <p>Enable natural language processing:</p>
-                    <div class="feature">Run: npm install node-nlp</div>
-                    <div class="feature">Restart server to activate AI</div>
-                    <p style="margin-top: 15px; color: #666;">Currently running in basic keyword mode</p>
-                </div>`}
-                
-                <div class="card">
-                    <h3>??? API Endpoints</h3>
-                    <div class="feature"><strong>/health</strong> - System health check</div>
-                    <div class="feature"><strong>/sessions</strong> - Active session info</div>
-                    <div class="feature"><strong>/test-dotorders-erp</strong> - Test ERP connection</div>
-                    ${nlpStatus.nlpAvailable ? '<div class="feature"><strong>/test-nlp/[message]</strong> - Test NLP</div>' : ''}
+                    <h3>Debug Tools</h3>
+                    <div class="feature">Real-time ERP monitoring</div>
+                    <div class="feature">Order flow tracking</div>
+                    <div class="feature">Error logging system</div>
+                    <div class="feature">Connection diagnostics</div>
+                    <a href="/debug-dashboard" class="btn debug">Debug Dashboard</a>
+                    <a href="/test-erp-detailed" class="btn debug">Test ERP</a>
                 </div>
                 
                 <div class="card">
-                    <h3>?? Business Features</h3>
-                    <div class="feature">${nlpStatus.nlpAvailable ? 'Smart' : 'Keyword-based'} Order Processing</div>
-                    <div class="feature">Customer Account Management</div>
-                    <div class="feature">ERPNext Integration</div>
+                    <h3>API Endpoints</h3>
+                    <div class="feature"><strong>/debug-dashboard</strong> - Real-time debugging</div>
+                    <div class="feature"><strong>/test-erp-detailed</strong> - ERP diagnostics</div>
+                    <div class="feature"><strong>/test-order-creation</strong> - Test orders</div>
+                    <div class="feature"><strong>/debug-logs</strong> - View logs</div>
+                    <div class="feature"><strong>/health</strong> - System health</div>
+                </div>
+                
+                <div class="card">
+                    <h3>Business Features</h3>
+                    <div class="feature">Quantity-aware Order Processing</div>
+                    <div class="feature">Enhanced Customer Management</div>
+                    <div class="feature">ERPNext Sales Order Integration</div>
                     <div class="feature">WhatsApp Business API</div>
                     <div class="feature">Conversation State Management</div>
-                    <div class="feature">Automated Session Cleanup</div>
+                    <div class="feature">Automated Error Recovery</div>
                 </div>
             </div>
         </div>
@@ -356,228 +772,35 @@ function generateHomepage(businessData, analytics) {
     `;
 }
 
-function generateNLPDashboard() {
-    return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>?? AI Water Delivery Bot - NLP Testing</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                min-height: 100vh; 
-                padding: 20px; 
-            }
-            .container { max-width: 1200px; margin: 0 auto; }
-            .header { 
-                text-align: center; 
-                color: white; 
-                margin-bottom: 30px; 
-                text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
-            }
-            .status-bar { 
-                background: ${nlpStatus.nlpReady ? 'linear-gradient(135deg, #4CAF50, #45a049)' : 'linear-gradient(135deg, #FF9800, #F57C00)'}; 
-                color: white; 
-                padding: 15px; 
-                border-radius: 10px; 
-                margin-bottom: 20px; 
-                text-align: center; 
-                font-weight: bold; 
-            }
-            .card { 
-                background: rgba(255, 255, 255, 0.95); 
-                backdrop-filter: blur(10px); 
-                padding: 25px; 
-                border-radius: 15px; 
-                box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
-                margin-bottom: 20px;
-            }
-            .input-group { margin: 15px 0; }
-            .input-group label { 
-                display: block; 
-                margin-bottom: 8px; 
-                font-weight: 600; 
-                color: #555; 
-            }
-            .input-group input { 
-                width: 100%; 
-                padding: 12px; 
-                border: 2px solid #e1e1e1; 
-                border-radius: 8px; 
-                font-size: 14px; 
-            }
-            .btn { 
-                background: linear-gradient(135deg, #667eea, #764ba2); 
-                color: white; 
-                padding: 12px 24px; 
-                border: none; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                font-weight: 600; 
-                width: 100%; 
-            }
-            .btn:hover { transform: translateY(-2px); }
-            .result { 
-                background: #f8f9fa; 
-                padding: 20px; 
-                margin: 15px 0; 
-                border-radius: 10px; 
-                border-left: 5px solid #667eea; 
-            }
-            pre { 
-                background: #2c3e50; 
-                color: #ecf0f1; 
-                padding: 15px; 
-                border-radius: 8px; 
-                overflow-x: auto; 
-                margin: 10px 0; 
-            }
-            .test-cases { 
-                display: grid; 
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                gap: 10px; 
-                margin: 15px 0; 
-            }
-            .test-case { 
-                background: linear-gradient(135deg, #e74c3c, #c0392b); 
-                color: white; 
-                padding: 12px; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                text-align: center; 
-                font-size: 13px; 
-                font-weight: 600; 
-            }
-            .test-case:hover { transform: translateY(-2px); }
-            .test-case:nth-child(2n) { background: linear-gradient(135deg, #3498db, #2980b9); }
-            .test-case:nth-child(3n) { background: linear-gradient(135deg, #27ae60, #229954); }
-            .test-case:nth-child(4n) { background: linear-gradient(135deg, #f39c12, #d68910); }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>?? AI Water Delivery Bot</h1>
-                <p>Natural Language Processing Testing Dashboard</p>
-            </div>
-            
-            <div class="status-bar">
-                NLP Engine: <strong>${nlpStatus.nlpReady ? '? READY' : '?? TRAINING'}</strong> | 
-                Sessions: <strong>${getBusinessData().activeSessions}</strong> | 
-                Queries: <strong>${getNLPAnalytics().totalQueries}</strong>
-            </div>
-            
-            <div class="card">
-                <h3>?? Test NLP Processing</h3>
-                <div class="input-group">
-                    <label>Test Message:</label>
-                    <input type="text" id="testMessage" placeholder="Try: I need water for my office" maxlength="200">
-                </div>
-                <button class="btn" onclick="testMessage()" ${!nlpStatus.nlpReady ? 'disabled' : ''}>
-                    Analyze Message
-                </button>
-                <div id="testResult"></div>
-            </div>
-            
-            <div class="card">
-                <h3>?? Quick Test Cases</h3>
-                <p style="margin-bottom: 15px;">Click to test:</p>
-                <div class="test-cases">
-                    <div class="test-case" onclick="runTest('hello there')">?? Greeting</div>
-                    <div class="test-case" onclick="runTest('I need 5 water bottles for office')">?? Order Intent</div>
-                    <div class="test-case" onclick="runTest('show me your menu and prices')">?? Menu Request</div>
-                    <div class="test-case" onclick="runTest('do you deliver to Dubai Marina?')">?? Delivery Query</div>
-                    <div class="test-case" onclick="runTest('what payment methods do you accept')">?? Payment Info</div>
-                    <div class="test-case" onclick="runTest('I need help with my order')">? Help Request</div>
-                    <div class="test-case" onclick="runTest('this service is terrible')">?? Complaint</div>
-                    <div class="test-case" onclick="runTest('971501234567')">?? Phone Lookup</div>
-                </div>
-            </div>
-        </div>
-        
-        <script>
-            async function testMessage() {
-                const message = document.getElementById('testMessage').value.trim();
-                if (!message) {
-                    alert('Please enter a message to test');
-                    return;
-                }
-                
-                try {
-                    const response = await fetch('/test-nlp/' + encodeURIComponent(message));
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        document.getElementById('testResult').innerHTML = \`
-                            <div class="result">
-                                <strong>?? Input:</strong> \${result.input}<br><br>
-                                <strong>?? Intent:</strong> \${result.nlp_analysis.intent}<br>
-                                <strong>?? Confidence:</strong> \${result.nlp_analysis.confidence}<br>
-                                <strong>??? Entities:</strong> \${JSON.stringify(result.nlp_analysis.entities)}<br>
-                                <strong>?? Sentiment:</strong> \${result.nlp_analysis.sentiment}<br><br>
-                                <strong>?? Bot Response:</strong>
-                                <pre>\${result.suggested_response}</pre>
-                            </div>
-                        \`;
-                    } else {
-                        document.getElementById('testResult').innerHTML = \`<div class="result" style="border-color: red;">? Error: \${result.error}</div>\`;
-                    }
-                } catch (error) {
-                    document.getElementById('testResult').innerHTML = \`<div class="result" style="border-color: red;">? Network Error: \${error.message}</div>\`;
-                }
-            }
-            
-            function runTest(message) {
-                document.getElementById('testMessage').value = message;
-                testMessage();
-            }
-            
-            document.getElementById('testMessage').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    testMessage();
-                }
-            });
-            
-            document.getElementById('testMessage').focus();
-        </script>
-    </body>
-    </html>
-    `;
-}
-
-// Session cleanup (remove inactive sessions after 1 hour)
+// Session cleanup with logging
 setInterval(() => {
     const cleaned = cleanupSessions();
     if (cleaned > 0) {
-        console.log(`?? Cleaned up ${cleaned} inactive sessions. Active: ${getBusinessData().activeSessions}`);
+        logDebug('sessions', `Cleaned up ${cleaned} inactive sessions. Active: ${getBusinessData().activeSessions}`);
     }
 }, 15 * 60 * 1000);
 
 // Start server
-app.listen(PORT, () => {
-    console.log(`?? ${nlpStatus.nlpAvailable ? 'AI-Enhanced ' : ''}Water Delivery Bot starting on port ${PORT}`);
-    console.log(`?? Features: ${nlpStatus.nlpAvailable ? 'NLP + ' : ''}Customer Service + Order Management + ERPNext Integration`);
-    console.log(`?? Server URL: http://localhost:${PORT}`);
-    if (nlpStatus.nlpAvailable) {
-        console.log(`?? NLP Dashboard: http://localhost:${PORT}/nlp-dashboard`);
-    } else {
-        console.log(`? To enable AI: npm install node-nlp && restart server`);
-    }
+app.listen(PORT, async () => {
+    console.log(`Enhanced Water Delivery Bot with DEBUG MODE starting on port ${PORT}`);
+    console.log(`Features: ${nlpStatus.nlpAvailable ? 'NLP + ' : ''}Customer Service + Order Management + ERPNext Integration + Debug Tools`);
+    console.log(`Server URL: http://localhost:${PORT}`);
+    console.log(`Debug Dashboard: http://localhost:${PORT}/debug-dashboard`);
+    console.log(`ERP Test: http://localhost:${PORT}/test-erp-detailed`);
+    
+    // Test ERP connection on startup
+    await testERPOnStartup();
     
     startKeepAlive();
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('?? Received SIGTERM, shutting down gracefully');
+    console.log('Received SIGTERM, shutting down gracefully');
     process.exit(0);
 });
 
 process.on('SIGINT', () => {
-    console.log('?? Received SIGINT, shutting down gracefully'); 
+    console.log('Received SIGINT, shutting down gracefully'); 
     process.exit(0);
 });
