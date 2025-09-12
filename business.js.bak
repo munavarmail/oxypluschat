@@ -104,7 +104,7 @@ Ready to get started with coupons?`
 
 *DELIVERY PROMISE:*
 • Same-day delivery possible
-• ?? SMS/WhatsApp delivery confirmations
+• SMS/WhatsApp delivery confirmations
 • Professional, uniformed delivery team
 
 Ready to schedule your delivery?`
@@ -135,7 +135,7 @@ Ready to place an order?`
 
     equipment: {
         keywords: ['dispenser', 'cooler', 'equipment', 'table top', 'hand pump', 'warranty'],
-        response: `*EQUIPMENT AVAILABLE* ??
+        response: `*EQUIPMENT AVAILABLE* ???
 
 *DISPENSERS:*
 • Table Top Dispenser - AED 25
@@ -343,7 +343,7 @@ ${message}
 
 *Next Steps:*
 • Our scheduling team will contact you within 2 hours
-• You'll receive ?? SMS/WhatsApp confirmation
+• You'll receive SMS/WhatsApp confirmation
 • We'll coordinate the best delivery time
 • Professional uniformed delivery team assigned
 
@@ -378,11 +378,11 @@ async function handleNLPIntent(nlpResult, session, userPhone) {
 
 I'm your intelligent assistant and can understand natural language. I can help you with:
 
-• ?? *Smart Ordering* - Just tell me what you need
-• ?? *Product Info* - Ask about any product naturally
-• ?? *Delivery Planning* - Schedule deliveries intelligently
-• ?? *Payment Options* - Flexible payment solutions
-• ?? *Account Management* - Send your mobile for lookup
+• ?? **Smart Ordering** - Just tell me what you need
+• ?? **Product Info** - Ask about any product naturally
+• ?? **Delivery Planning** - Schedule deliveries intelligently
+• ?? **Payment Options** - Flexible payment solutions
+• ?? **Account Management** - Send your mobile for lookup
 
 *How can I assist you today?*
 
@@ -545,11 +545,11 @@ async function handleDeliveryInquiry(entities, session) {
         switch (location) {
             case 'dubai':
             case 'dxb':
-                response += "\n\n*?? DUBAI DELIVERY:*\n• Same-day delivery available\n• All areas except JAFZA\n• Premium areas: Marina, Downtown, JBR";
+                response += "\n\n*??? DUBAI DELIVERY:*\n• Same-day delivery available\n• All areas except JAFZA\n• Premium areas: Marina, Downtown, JBR";
                 break;
             case 'sharjah':
             case 'shj':
-                response += "\n\n*?? SHARJAH DELIVERY:*\n• Next-day delivery standard\n• Full emirate coverage\n• Industrial areas supported";
+                response += "\n\n*??? SHARJAH DELIVERY:*\n• Next-day delivery standard\n• Full emirate coverage\n• Industrial areas supported";
                 break;
             case 'ajman':
             case 'ajm':
@@ -579,9 +579,9 @@ async function handleHelpRequest(session, entities) {
     }
     
     const nlpStatus = getNLPStatus();
-    return `*I'M HERE TO HELP!* ??
+    return `*I'M HERE TO HELP!* ???
 
-*? POPULAR ACTIONS:*
+*?? POPULAR ACTIONS:*
 • "Show menu" - Browse all products
 • "Order water" - Smart ordering assistant
 • "Delivery to [area]" - Area-specific info
@@ -608,7 +608,7 @@ async function handleComplaint(nlpResult, session, userPhone) {
     
     return `I sincerely apologize for any inconvenience! ??
 
-${severity === 'high' ? '?? *HIGH PRIORITY COMPLAINT*' : '?? *COMPLAINT LOGGED*'}
+${severity === 'high' ? '?? **HIGH PRIORITY COMPLAINT**' : '?? **COMPLAINT LOGGED**'}
 
 Your satisfaction is our priority. I'm escalating this to management immediately.
 
