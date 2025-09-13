@@ -1617,3 +1617,605 @@ app.listen(PORT, () => {
     
     startKeepAlive();
 });
+
+async function identifyCustomer(message, session, userPhone) {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Check if it's a mobile number
+    if (isMobileNumber(message)) {
+        console.log(`Mobile number detected: ${message}`);
+        const customerInfo = await getCustomerByMobile(message.trim());
+        
+        if (customerInfo && !customerInfo.includes('CUSTOMER NOT FOUND')) {
+            session.customerInfo = customerInfo;
+            session.state = 'customer_identified';
+            
+            return `${customerInfo}
+
+CUSTOMER VERIFIED ?
+
+What would you like to order today?
+• Type "pricing" for our complete menu
+• Say "I want [product]" for direct ordering
+• Ask "delivery options" for scheduling info
+
+Or just tell me naturally what you need!`;
+        } else {
+            session.state = 'new_customer_setup';
+            return `WELCOME NEW CUSTOMER! ??
+
+Mobile: ${message}
+
+To complete your profile and enable faster future orders, I'll need:
+
+1. **Your Name** (for delivery)
+2. **Delivery Location** 
+
+You can either:
+?? **Share your location** (tap attach ? location)
+?? **Type your address** manually
+
+Which option would you prefer?
+
+Reply with:
+• "share location" - I'll guide you to share via WhatsApp
+• "type address" - I'll collect your address details
+• Or just type your address directly`;
+        }
+    }
+    
+    return null; // Not a mobile number
+}
+
+// Enhanced location collection with WhatsApp location sharing
+async function handleLocationCollection(message, session, userPhone) {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    if (lowerMessage.includes('share location') || lowerMessage.includes('send location')) {
+        session.state = 'waiting_for_location';
+        return `LOCATION SHARING INSTRUCTIONS ??
+
+To share your location via WhatsApp:
+
+1. Tap the **?? attachment** icon (bottom left)
+2. Select **?? Location**
+3. Choose **Send your current location** or **Send a specific location**
+4. Tap **Send**
+
+This helps us:
+? Find you quickly for delivery
+? Validate you're in our delivery area (Dubai, Sharjah, Ajman)
+? Provide accurate delivery time estimates
+
+Alternatively, you can still type your address manually.`;
+    
+    } else if (lowerMessage.includes('type address') || lowerMessage.includes('manual')) {
+        session.state = 'collecting_address_manual';
+        return `MANUAL ADDRESS ENTRY ??
+
+Please provide your complete delivery address:
+
+**Required Information:**
+• Building/Villa name or number
+• Street name
+• Area/District
+• City (Dubai/Sharjah/Ajman)
+
+**Example:**
+"Al Noor Building, Apartment 304
+Sheikh Zayed Road
+Business Bay, Dubai"
+
+**Optional but helpful:**
+• Landmark nearby
+• Special delivery instructions
+• Gate/entrance details
+
+Type your complete address:`;
+    
+    } else {
+        // Assume they're typing address directly
+        return await processManualAddress(message, session, userPhone);
+    }
+}
+
+// Process location message (coordinates from WhatsApp)
+async function processLocationMessage(message, session, userPhone) {
+    if (message.location) {
+        const { latitude, longitude } = message.location;
+        console.log(`Location received: ${latitude}, ${longitude}`);
+        
+        // Validate location is in service area
+        const locationValidation = await validateDeliveryLocation(latitude, longitude);
+        
+        if (locationValidation.inServiceArea) {
+            session.customerLocation = {
+                latitude: latitude,
+                longitude: longitude,
+                address: locationValidation.formattedAddress,
+                area: locationValidation.area,
+                city: locationValidation.city
+            };
+            
+            session.state = 'location_confirmed';
+            
+            return `LOCATION CONFIRMED ?
+
+?? **Delivery Address:**
+${locationValidation.formattedAddress}
+
+?? **Area:** ${locationValidation.area}, ${locationValidation.city}
+?? **Estimated delivery:** ${locationValidation.estimatedDelivery}
+
+${locationValidation.inServiceArea ? '?? **Delivery available!**' : '? **Outside delivery area**'}
+
+${session.state === 'new_customer_setup' ? 
+    'Great! Now I just need your name for delivery.\n\nWhat name should I use for your orders?' : 
+    'Perfect! What would you like to order today?'
+}`;
+        } else {
+            return `LOCATION OUTSIDE DELIVERY AREA ?
+
+?? **Your location:** ${locationValidation.formattedAddress}
+
+Sorry, we currently only deliver to:
+??? Dubai
+??? Sharjah  
+??? Ajman
+(Excluding freezones)
+
+**Options:**
+1. Share a different delivery location within our service area
+2. Contact us for special delivery arrangements
+3. Check if we serve your specific area
+
+Would you like to try a different address?`;
+        }
+    }
+    
+    return "I didn't receive your location. Please try sharing your location again or type your address manually.";
+}
+
+// Validate if location is in delivery area
+async function validateDeliveryLocation(latitude, longitude) {
+    try {
+        // Use reverse geocoding to get address details
+        // You can integrate with Google Maps API or similar service
+        // For now, using a simplified validation
+        
+        const deliveryAreas = {
+            dubai: { lat: [25.0, 25.4], lon: [55.0, 55.5] },
+            sharjah: { lat: [25.2, 25.4], lon: [55.3, 55.6] },
+            ajman: { lat: [25.3, 25.5], lon: [55.4, 55.6] }
+        };
+        
+        let inServiceArea = false;
+        let city = 'Unknown';
+        let area = 'Unknown';
+        
+        // Check if coordinates fall within delivery areas
+        Object.entries(deliveryAreas).forEach(([cityName, bounds]) => {
+            if (latitude >= bounds.lat[0] && latitude <= bounds.lat[1] &&
+                longitude >= bounds.lon[0] && longitude <= bounds.lon[1]) {
+                inServiceArea = true;
+                city = cityName.charAt(0).toUpperCase() + cityName.slice(1);
+            }
+        });
+        
+        // In production, you would call a geocoding service here
+        const formattedAddress = `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        
+        return {
+            inServiceArea: inServiceArea,
+            formattedAddress: formattedAddress,
+            area: area,
+            city: city,
+            estimatedDelivery: inServiceArea ? '2-4 hours' : 'Not available'
+        };
+        
+    } catch (error) {
+        console.error('Error validating location:', error);
+        return {
+            inServiceArea: false,
+            formattedAddress: 'Unable to verify location',
+            area: 'Unknown',
+            city: 'Unknown',
+            estimatedDelivery: 'Unknown'
+        };
+    }
+}
+
+// Process manually typed address
+async function processManualAddress(address, session, userPhone) {
+    console.log(`Processing manual address: ${address}`);
+    
+    const lowerAddress = address.toLowerCase();
+    const validCities = ['dubai', 'sharjah', 'ajman'];
+    const foundCity = validCities.find(city => lowerAddress.includes(city));
+    
+    if (!foundCity) {
+        return `ADDRESS VERIFICATION NEEDED ??
+
+I noticed you didn't specify the city. We deliver to:
+??? Dubai
+??? Sharjah  
+??? Ajman
+
+Please include your city in the address:
+
+**Example:**
+"Al Noor Building, Apartment 304
+Sheikh Zayed Road
+Business Bay, **Dubai**"
+
+Please provide your complete address with city:`;
+    }
+    
+    // Validate address format
+    if (address.length < 10) {
+        return `ADDRESS TOO SHORT ??
+
+Please provide a more detailed address including:
+• Building/Villa name or number
+• Street name  
+• Area/District
+• City
+
+**Your current input:** "${address}"
+
+Please provide more details:`;
+    }
+    
+    // Address looks good
+    session.customerLocation = {
+        address: address,
+        city: foundCity.charAt(0).toUpperCase() + foundCity.slice(1),
+        type: 'manual'
+    };
+    
+    if (session.state === 'new_customer_setup') {
+        session.state = 'collecting_customer_name';
+        return `ADDRESS CONFIRMED ?
+
+?? **Delivery Address:**
+${address}
+
+Great! Now I just need your name for delivery records.
+
+**What name should I use for your orders?**
+(This helps our delivery team identify you)`;
+    } else {
+        session.state = 'address_confirmed';
+        return `ADDRESS UPDATED ?
+
+?? **New Delivery Address:**
+${address}
+
+Perfect! What would you like to order today?`;
+    }
+}
+
+// Handle customer name collection
+async function handleCustomerNameCollection(message, session, userPhone) {
+    const customerName = message.trim();
+    
+    if (customerName.length < 2) {
+        return `Please provide a valid name for delivery purposes:`;
+    }
+    
+    session.customerInfo = {
+        name: customerName,
+        phone: userPhone,
+        location: session.customerLocation
+    };
+    
+    session.state = 'customer_profile_complete';
+    
+    return `CUSTOMER PROFILE COMPLETE ?
+
+?? **Name:** ${customerName}
+?? **Phone:** ${userPhone}
+?? **Address:** ${session.customerLocation.address}
+
+Your profile is now set up for faster future orders!
+
+**READY TO ORDER?**
+
+Our popular products:
+• Single Bottle - AED 7 + AED 15 deposit
+• 10+1 Coupon Book - AED 70 (best for regular use)
+• Premium Cooler - AED 300 (hot & cold water)
+
+Just say what you'd like:
+"I want single bottle" or "Give me coupon book"
+
+What can I get started for you?`;
+}
+
+// Enhanced customer lookup with location info
+async function getCustomerByMobileEnhanced(mobileNumber) {
+    try {
+        console.log(`Enhanced customer lookup: ${mobileNumber}`);
+        
+        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        
+        const response = await axios.get(searchUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([['mobile_no', '=', mobileNumber]]),
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'creation', 'modified'])
+            }
+        });
+
+        const customers = response.data.data;
+        
+        if (customers && customers.length > 0) {
+            const customer = customers[0];
+            console.log(`Existing customer found: ${customer.customer_name}`);
+            
+            // Get customer's addresses and recent orders
+            const [addressInfo, orderHistory] = await Promise.all([
+                getCustomerAddressEnhanced(customer.name),
+                getRecentOrders(customer.name)
+            ]);
+            
+            let responseText = `EXISTING CUSTOMER FOUND ?
+
+?? **Name:** ${customer.customer_name}
+?? **Mobile:** ${customer.mobile_no}
+?? **Customer since:** ${formatDate(customer.creation)}
+
+${addressInfo}
+
+${orderHistory}
+
+Welcome back! Ready to place another order?`;
+            
+            return responseText;
+            
+        } else {
+            console.log(`New customer: ${mobileNumber}`);
+            return `NEW CUSTOMER DETECTED ??
+
+Mobile: ${mobileNumber}
+
+I'll help you set up your customer profile for faster future orders.
+
+To get started, I need:
+1?? **Your delivery location**
+2?? **Your name**
+
+**LOCATION OPTIONS:**
+?? Share location via WhatsApp (recommended)
+?? Type your address manually
+
+Which would you prefer?
+Reply: "share location" or "type address"`;
+        }
+        
+    } catch (error) {
+        console.error('Error in enhanced customer lookup:', error.response?.data || error.message);
+        return 'Unable to verify customer information. Please try again or contact support.';
+    }
+}
+
+// Get enhanced customer address information
+async function getCustomerAddressEnhanced(customerName) {
+    try {
+        const addressUrl = `${ERPNEXT_URL}/api/resource/Address`;
+        
+        const response = await axios.get(addressUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([
+                    ['Dynamic Link', 'link_name', '=', customerName],
+                    ['Dynamic Link', 'link_doctype', '=', 'Customer']
+                ]),
+                fields: JSON.stringify(['address_title', 'address_line1', 'address_line2', 'city', 'phone', 'is_primary_address'])
+            }
+        });
+
+        const addresses = response.data.data;
+        
+        if (addresses && addresses.length > 0) {
+            let addressText = '?? **DELIVERY ADDRESSES:**\n';
+            
+            addresses.forEach((address, index) => {
+                addressText += `\n${index + 1}. ${address.address_title || 'Address'}${address.is_primary_address ? ' (Primary)' : ''}\n`;
+                if (address.address_line1) addressText += `   ${address.address_line1}\n`;
+                if (address.address_line2) addressText += `   ${address.address_line2}\n`;
+                if (address.city) addressText += `   ${address.city}\n`;
+            });
+            
+            if (addresses.length > 1) {
+                addressText += `\n?? You have ${addresses.length} addresses. I'll use your primary address unless you specify otherwise.`;
+            }
+            
+            return addressText;
+        } else {
+            return '?? **ADDRESS:** No address on file - I can help you add one!';
+        }
+        
+    } catch (error) {
+        console.error('Error fetching enhanced address:', error.response?.data || error.message);
+        return '?? **ADDRESS:** Unable to fetch address information';
+    }
+}
+
+// Get recent order history
+async function getRecentOrders(customerName) {
+    try {
+        const orderUrl = `${ERPNEXT_URL}/api/resource/Sales Order`;
+        
+        const response = await axios.get(orderUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([['customer', '=', customerName]]),
+                fields: JSON.stringify(['name', 'transaction_date', 'grand_total', 'status']),
+                order_by: 'transaction_date desc',
+                limit: 3
+            }
+        });
+
+        const orders = response.data.data;
+        
+        if (orders && orders.length > 0) {
+            let orderText = `?? **RECENT ORDERS:**\n`;
+            
+            orders.forEach((order, index) => {
+                orderText += `${index + 1}. ${order.name} - AED ${order.grand_total} (${order.status})\n`;
+                orderText += `   Date: ${formatDate(order.transaction_date)}\n`;
+            });
+            
+            return orderText;
+        } else {
+            return '?? **ORDERS:** No previous orders found';
+        }
+        
+    } catch (error) {
+        console.error('Error fetching recent orders:', error);
+        return '?? **ORDERS:** Unable to fetch order history';
+    }
+}
+
+// Format date for display
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    } catch (error) {
+        return dateString;
+    }
+}
+
+// Enhanced session creation with location support
+function createEnhancedUserSession() {
+    return {
+        state: 'active',
+        conversationHistory: [],
+        customerInfo: null,
+        customerLocation: null,
+        interests: [],
+        qualification: {
+            consumption: null,
+            location: null,
+            currentSupplier: null,
+            budget: null,
+            urgency: null
+        },
+        orderInProgress: null,
+        lastActivity: Date.now(),
+        salesStage: 'discovery',
+        isExistingCustomer: false,
+        locationShared: false
+    };
+}
+
+// Update the main message handler to include these new features
+async function handleIncomingMessageEnhanced(message, phoneNumberId) {
+    const from = message.from;
+    const messageBody = message.text?.body;
+    
+    if (messageBody || message.location) {
+        console.log(`Processing message from ${from}`);
+        
+        // Get or create user session
+        if (!userSessions.has(from)) {
+            userSessions.set(from, createEnhancedUserSession());
+        }
+        
+        const session = userSessions.get(from);
+        session.lastActivity = Date.now();
+        
+        let response;
+        
+        // Handle location messages
+        if (message.location && (session.state === 'waiting_for_location' || session.state === 'new_customer_setup')) {
+            console.log('Location message received');
+            response = await processLocationMessage(message, session, from);
+        }
+        // Handle customer identification states
+        else if (session.state === 'new_customer_setup' && messageBody) {
+            response = await handleLocationCollection(messageBody, session, from);
+        }
+        else if (session.state === 'collecting_customer_name') {
+            response = await handleCustomerNameCollection(messageBody, session, from);
+        }
+        else if (session.state === 'collecting_address_manual') {
+            response = await processManualAddress(messageBody, session, from);
+        }
+        // Priority existing states
+        else if (session.state === 'confirming_order') {
+            response = await handleOrderConfirmation(messageBody, session, from);
+        }
+        else if (session.state === 'collecting_address') {
+            response = await handleAddressCollection(messageBody, session, from);
+        }
+        // Check for customer identification by mobile number
+        else if (messageBody && !session.customerInfo) {
+            const identificationResult = await identifyCustomer(messageBody, session, from);
+            if (identificationResult) {
+                response = identificationResult;
+            } else if (detectOrderingIntent(messageBody)) {
+                response = await handleFlexibleOrderCommand(messageBody, session, from);
+            } else {
+                const context = await buildContextForGPT(session, from);
+                response = await getGPTResponse(messageBody, session, context);
+            }
+        }
+        // Handle ordering intent
+        else if (detectOrderingIntent(messageBody)) {
+            response = await handleFlexibleOrderCommand(messageBody, session, from);
+        }
+        // Default GPT conversation
+        else {
+            const context = await buildContextForGPT(session, from);
+            response = await getGPTResponse(messageBody, session, context);
+        }
+        
+        console.log('Sending response:', response.substring(0, 100) + '...');
+        await sendMessage(from, response, phoneNumberId);
+    }
+}
+
+// Test endpoint for customer identification
+app.post('/test-customer-identification', async (req, res) => {
+    try {
+        const { phone = '+971501234567' } = req.body;
+        
+        console.log('=== TESTING CUSTOMER IDENTIFICATION ===');
+        
+        const testSession = createEnhancedUserSession();
+        const result = await identifyCustomer(phone, testSession, phone);
+        
+        res.json({
+            status: 'success',
+            phone: phone,
+            result: result,
+            sessionState: testSession.state,
+            customerInfo: testSession.customerInfo,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('Test customer identification failed:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Test failed',
+            error: error.message
+        });
+    }
+});
