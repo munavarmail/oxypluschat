@@ -9,7 +9,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// OpenAI Configuration for GPT-4.1 mini
+// OpenAI Configuration
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -27,15 +27,13 @@ const userSessions = new Map();
 
 // Service area coordinates (UAE major cities)
 const SERVICE_AREAS = {
-    dubai: { lat: 25.2048, lng: 55.2708, radius: 50 }, // 50km radius
+    dubai: { lat: 25.2048, lng: 55.2708, radius: 50 },
     sharjah: { lat: 25.3463, lng: 55.4209, radius: 30 },
     ajman: { lat: 25.4052, lng: 55.5136, radius: 25 }
 };
 
-// Welcome menu options
+// Welcome menu
 const WELCOME_MENU = `WELCOME TO PREMIUM WATER DELIVERY SERVICE!
-
-Choose what you'd like to do:
 
 ?? PLACE ORDER
 Just say what you want:
@@ -43,40 +41,25 @@ Just say what you want:
 • "coupon", "bulk", "package"  
 • "cooler", "dispenser", "pump"
 
-?? VIEW PRICING
-Type: "price" or "menu"
-
-?? DELIVERY INFO
-Type: "delivery" or share your location
-
-?? PAYMENT OPTIONS
-Type: "payment"
-
-?? CUSTOMER SUPPORT
-Type: "help" or "support"
-
-?? RAISE COMPLAINT
-Type: "complaint" or "issue"
-
-?? CHECK ACCOUNT
-Send your mobile number
-
-?? SPECIAL OFFERS
-Type: "offers" or "deals"
-
-?? COMPANY INFO
-Type: "about"
+?? VIEW PRICING - Type: "price" or "menu"
+?? DELIVERY INFO - Type: "delivery"
+?? PAYMENT OPTIONS - Type: "payment"
+?? CUSTOMER SUPPORT - Type: "help"
+?? RAISE COMPLAINT - Type: "complaint"
+?? CHECK ACCOUNT - Send your mobile number
+?? SPECIAL OFFERS - Type: "offers"
+?? COMPANY INFO - Type: "about"
 
 Just tell me what you need in your own words!`;
 
-// Enhanced product catalog with fuzzy matching keywords
+// Enhanced product catalog with fuzzy matching
 const PRODUCTS = {
     'single_bottle': { 
         name: 'Single Bottle', 
         price: 7, 
         deposit: 15, 
         item_code: '5 Gallon Filled',
-        description: '5-gallon water bottle made from 100% virgin material with low sodium and pH-balanced water',
+        description: '5-gallon water bottle made from 100% virgin material',
         keywords: ['single', 'one', 'bottle', 'individual', 'trial', '1', 'btl', 'singl', 'bottl'],
         fuzzyKeywords: ['sngle', 'botl', 'botle', 'singel', '1btl', 'onebottle'],
         salesPoints: ['Perfect for trying our quality', 'No commitment', 'Quick delivery']
@@ -89,7 +72,7 @@ const PRODUCTS = {
         description: 'Trial 5-gallon water bottle - perfect for first-time customers',
         keywords: ['trial', 'test', 'first', 'sample', 'try', 'tral', 'tryl'],
         fuzzyKeywords: ['triel', 'tryal', 'tst', 'smpl'],
-        salesPoints: ['Risk-free trial', 'Experience our quality', 'Same premium water']
+        salesPoints: ['Risk-free trial', 'Experience our quality']
     },
     'table_dispenser': { 
         name: 'Table Top Dispenser', 
@@ -99,7 +82,7 @@ const PRODUCTS = {
         description: 'Basic table top dispenser for convenient water access',
         keywords: ['table', 'dispenser', 'basic', 'simple', 'tbl', 'disp'],
         fuzzyKeywords: ['tabl', 'dispensr', 'dispenser', 'tbldispenser'],
-        salesPoints: ['No electricity needed', 'Compact design', 'Easy to use']
+        salesPoints: ['No electricity needed', 'Compact design']
     },
     'hand_pump': { 
         name: 'Hand Pump', 
@@ -109,17 +92,17 @@ const PRODUCTS = {
         description: 'Manual hand pump for bottles - most economical option',
         keywords: ['pump', 'manual', 'hand', 'cheap', 'hnd', 'pmp'],
         fuzzyKeywords: ['pumb', 'hanpump', 'handpmp', 'manul'],
-        salesPoints: ['Most affordable', 'No maintenance', 'Works anywhere']
+        salesPoints: ['Most affordable', 'No maintenance']
     },
     'premium_cooler': { 
         name: 'Premium Water Cooler', 
         price: 300, 
         deposit: 0, 
         item_code: 'Water Cooler',
-        description: 'Premium cooler with hot/cold water, 1-year warranty from Geo General',
+        description: 'Premium cooler with hot/cold water, 1-year warranty',
         keywords: ['premium', 'cooler', 'hot', 'cold', 'electric', 'cool', 'clr'],
         fuzzyKeywords: ['coler', 'coolar', 'premim', 'premum'],
-        salesPoints: ['Hot & cold water', '1-year warranty', 'Premium quality', 'Energy efficient']
+        salesPoints: ['Hot & cold water', '1-year warranty']
     },
     'coupon_10_1': { 
         name: '10+1 Coupon Book', 
@@ -129,7 +112,7 @@ const PRODUCTS = {
         description: '11 bottles (10+1 free), up to 3 bottles without deposit',
         keywords: ['10+1', '11', 'eleven', 'coupon', 'small', 'cpn', 'book'],
         fuzzyKeywords: ['10plus1', '11bottles', 'couponbook', 'smallpack'],
-        salesPoints: ['Save on deposit', 'Free bottle included', 'Better per-bottle price', 'Priority delivery']
+        salesPoints: ['Save on deposit', 'Free bottle included']
     },
     'coupon_100_40': { 
         name: '100+40 Coupon Book', 
@@ -139,7 +122,7 @@ const PRODUCTS = {
         description: '140 bottles total, up to 5 bottles without deposit, BNPL available',
         keywords: ['100+40', '140', 'bulk', 'large', 'bnpl', 'big', 'hundred'],
         fuzzyKeywords: ['100plus40', '140bottles', 'bulkpack', 'largpack'],
-        salesPoints: ['Best value for money', 'Buy now pay later option', 'Huge savings', 'No deposit for 5 bottles', 'Priority service']
+        salesPoints: ['Best value', 'Buy now pay later option']
     },
     'premium_package': { 
         name: '140 Bottles + Premium Dispenser', 
@@ -149,52 +132,9 @@ const PRODUCTS = {
         description: '140 bottles + Premium dispenser package - complete solution',
         keywords: ['premium', 'package', 'complete', 'combo', 'pkg', 'set'],
         fuzzyKeywords: ['premiumpack', 'completeset', 'combopack'],
-        salesPoints: ['Complete water solution', 'Premium dispenser included', 'Maximum convenience', 'Best overall value']
+        salesPoints: ['Complete solution', 'Maximum convenience']
     }
 };
-
-// Enhanced knowledge base
-const KNOWLEDGE_BASE = `
-COMPANY INFORMATION:
-- Water delivery service operating in Dubai, Sharjah, Ajman (except freezones)
-- HQ located in Ajman
-- 10+ years of experience in commercial and residential delivery
-- Focus on quality: 100% virgin material bottles, low sodium, pH-balanced water
-- Superior customer service compared to competitors
-
-PRODUCTS AND PRICING:
-1. Single Bottle - AED 7 + AED 15 deposit (5-gallon water bottle)
-2. Trial Bottle - AED 7 + AED 15 deposit (perfect for first-time customers)
-3. Table Top Dispenser - AED 25 (basic dispenser, no electricity needed)
-4. Hand Pump - AED 15 (manual pump, most economical)
-5. Premium Water Cooler - AED 300 (hot/cold water, 1-year warranty)
-6. 10+1 Coupon Book - AED 70 (11 bottles, save on deposit)
-7. 100+40 Coupon Book - AED 700 (140 bottles, best value, BNPL available)
-8. Premium Package - AED 920 (140 bottles + premium dispenser)
-
-SMART ORDER RECOGNITION:
-System understands natural language, spelling mistakes, and short forms.
-
-DUAL LOCATION SERVICES:
-GPS location capture OR manual address input for accurate delivery.
-
-ORDER PROCESS:
-Natural language order processing with intelligent product matching.
-
-PAYMENT METHODS:
-- Cash payment on delivery
-- Bank transfer
-- Card payment (notify one day prior)
-- Buy Now Pay Later (ONLY for 100+40 Coupon Book)
-
-DELIVERY INFORMATION:
-- Coverage: Dubai, Sharjah, Ajman (no freezones)
-- Same-day/next-day delivery available
-- Weekly scheduled delivery options
-- Free delivery with coupon books
-- Standard charges for individual bottles
-- Both GPS and manual address validation for service area
-`;
 
 // Enhanced user session structure
 function createUserSession() {
@@ -217,7 +157,7 @@ function createUserSession() {
     };
 }
 
-// Smart product matching with fuzzy logic
+// Smart product matching with fuzzy logic and spelling tolerance
 function smartProductMatch(userInput) {
     const input = userInput.toLowerCase().trim();
     const words = input.split(/\s+/);
@@ -235,7 +175,7 @@ function smartProductMatch(userInput) {
             }
         }
         
-        // Check fuzzy matches (medium weight)
+        // Check fuzzy matches for spelling mistakes (medium weight)
         for (const fuzzyKeyword of product.fuzzyKeywords || []) {
             if (input.includes(fuzzyKeyword.toLowerCase())) {
                 score += 7;
@@ -257,7 +197,7 @@ function smartProductMatch(userInput) {
             score += Math.floor(nameSimilarity * 8);
         }
         
-        // Special patterns
+        // Special number patterns
         if (isNumberMatch(input, productKey)) {
             score += 15;
         }
@@ -313,7 +253,6 @@ function isNumberMatch(input, productKey) {
             input.includes(pattern.toLowerCase())
         );
     }
-    
     return false;
 }
 
@@ -333,10 +272,7 @@ function extractLocationCoordinates(message) {
 // Validate if location is within service area
 function validateServiceArea(latitude, longitude) {
     for (const [city, area] of Object.entries(SERVICE_AREAS)) {
-        const distance = calculateDistance(
-            latitude, longitude,
-            area.lat, area.lng
-        );
+        const distance = calculateDistance(latitude, longitude, area.lat, area.lng);
         
         if (distance <= area.radius) {
             return {
@@ -354,7 +290,7 @@ function validateServiceArea(latitude, longitude) {
     };
 }
 
-// Calculate distance between two coordinates (Haversine formula)
+// Calculate distance between coordinates (Haversine formula)
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -364,7 +300,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
         Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in kilometers
+    return R * c;
 }
 
 // Find nearest city to coordinates
@@ -373,18 +309,47 @@ function findNearestCity(latitude, longitude) {
     let minDistance = Infinity;
     
     for (const [city, area] of Object.entries(SERVICE_AREAS)) {
-        const distance = calculateDistance(
-            latitude, longitude,
-            area.lat, area.lng
-        );
-        
+        const distance = calculateDistance(latitude, longitude, area.lat, area.lng);
         if (distance < minDistance) {
             minDistance = distance;
             nearest = { city, distance };
         }
     }
-    
     return nearest;
+}
+
+// Validate manual address for service area
+function validateManualAddress(address) {
+    const lowerAddress = address.toLowerCase();
+    
+    if (lowerAddress.includes('dubai')) {
+        return { isValid: true, city: 'dubai', method: 'manual_address', confidence: 'high' };
+    } else if (lowerAddress.includes('sharjah')) {
+        return { isValid: true, city: 'sharjah', method: 'manual_address', confidence: 'high' };
+    } else if (lowerAddress.includes('ajman')) {
+        return { isValid: true, city: 'ajman', method: 'manual_address', confidence: 'high' };
+    } else {
+        // Check for known areas/neighborhoods
+        const knownAreas = {
+            dubai: ['jumeirah', 'deira', 'bur dubai', 'marina', 'downtown', 'jlt', 'jbr'],
+            sharjah: ['rolla', 'al nahda', 'al majaz', 'al qasba', 'king faisal'],
+            ajman: ['al nuaimiya', 'al rashidiya', 'al jerf', 'al rawda', 'corniche']
+        };
+        
+        for (const [city, areas] of Object.entries(knownAreas)) {
+            if (areas.some(area => lowerAddress.includes(area))) {
+                return { isValid: true, city: city, method: 'manual_address', confidence: 'medium' };
+            }
+        }
+        
+        return {
+            isValid: false,
+            city: null,
+            method: 'manual_address',
+            confidence: 'unknown',
+            message: 'Please confirm if this address is in Dubai, Sharjah, or Ajman'
+        };
+    }
 }
 
 // Check if message looks like a manual address
@@ -399,68 +364,11 @@ function isManualAddress(message) {
     const wordCount = message.trim().split(/\s+/).length;
     const hasNumbers = /\d/.test(message);
     
-    // Check if it has address-like characteristics
     const hasAddressWords = addressIndicators.some(indicator => 
         lowerMessage.includes(indicator)
     );
     
-    // Must have at least 3 words, some numbers, and address-like words
     return wordCount >= 3 && hasNumbers && hasAddressWords;
-}
-
-// Validate manual address for service area
-function validateManualAddress(address) {
-    const lowerAddress = address.toLowerCase();
-    
-    // Check for UAE cities in the address
-    if (lowerAddress.includes('dubai')) {
-        return {
-            isValid: true,
-            city: 'dubai',
-            method: 'manual_address',
-            confidence: 'high'
-        };
-    } else if (lowerAddress.includes('sharjah')) {
-        return {
-            isValid: true,
-            city: 'sharjah', 
-            method: 'manual_address',
-            confidence: 'high'
-        };
-    } else if (lowerAddress.includes('ajman')) {
-        return {
-            isValid: true,
-            city: 'ajman',
-            method: 'manual_address', 
-            confidence: 'high'
-        };
-    } else {
-        // Check for known areas/neighborhoods
-        const knownAreas = {
-            dubai: ['jumeirah', 'deira', 'bur dubai', 'marina', 'downtown', 'jlt', 'jbr', 'mall of emirates', 'dubai mall', 'al barsha', 'motor city', 'silicon oasis', 'international city'],
-            sharjah: ['rolla', 'al nahda', 'al majaz', 'al qasba', 'king faisal', 'al taawun', 'abu shagara', 'al fisht'],
-            ajman: ['al nuaimiya', 'al rashidiya', 'al jerf', 'al rawda', 'corniche']
-        };
-        
-        for (const [city, areas] of Object.entries(knownAreas)) {
-            if (areas.some(area => lowerAddress.includes(area))) {
-                return {
-                    isValid: true,
-                    city: city,
-                    method: 'manual_address',
-                    confidence: 'medium'
-                };
-            }
-        }
-        
-        return {
-            isValid: false,
-            city: null,
-            method: 'manual_address',
-            confidence: 'unknown',
-            message: 'Please confirm if this address is in Dubai, Sharjah, or Ajman'
-        };
-    }
 }
 
 // Keep-alive functions
@@ -475,7 +383,7 @@ async function keepAlive() {
             timeout: 30000,
             headers: { 'User-Agent': 'KeepAlive-Bot/1.0' }
         });
-        console.log(`Keep-alive ping successful at ${new Date().toISOString()} - Status: ${response.status}`);
+        console.log(`Keep-alive ping successful at ${new Date().toISOString()}`);
     } catch (error) {
         console.error(`Keep-alive ping failed at ${new Date().toISOString()}:`, error.message);
     }
@@ -483,7 +391,7 @@ async function keepAlive() {
 
 function startKeepAlive() {
     if (!KEEP_ALIVE_URL) {
-        console.log('KEEP_ALIVE_URL not configured - server may sleep on free hosting plans');
+        console.log('KEEP_ALIVE_URL not configured');
         return;
     }
     
@@ -497,39 +405,24 @@ async function getGPTResponse(userMessage, session, context = '') {
     try {
         const conversationHistory = session.conversationHistory.slice(-8);
         
-        const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE with SMART ORDER RECOGNITION and DUAL LOCATION SERVICES.
-
-GREETING HANDLING:
-When customers greet with "hi", "hello", "hey", "good morning", etc., show them the complete welcome menu.
+        const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE.
 
 SMART ORDER RECOGNITION:
-The system now understands natural language, spelling mistakes, and variations:
 - "bottle" or "btl" = single bottle
 - "coupon" or "bulk" = coupon books  
-- "cooler" or "cool" = premium cooler
+- "cooler" = premium cooler
 - "pump" = hand pump
-- "dispenser" or "disp" = table dispenser
-- Numbers: "1", "10+1", "140", etc.
+- "dispenser" = table dispenser
 
-DUAL LOCATION SERVICES:
-- GPS location capture for delivery
-- Manual address input option
-- Service area validation for both methods
-- Coordinate display and storage
+NEW CUSTOMER REQUIREMENT:
+- Must collect BOTH manual address AND GPS location
+- Not options - both are mandatory for new customers
+- Existing customers can proceed with saved info
 
-CONTEXT:
-${KNOWLEDGE_BASE}
+GREETING HANDLING:
+Show complete welcome menu for greetings.
 
 ${context}
-
-CONVERSATION GUIDELINES:
-1. For greetings, show the complete welcome menu
-2. Use natural language understanding for orders
-3. Handle spelling mistakes gracefully
-4. Offer both GPS and manual address options
-5. Validate service areas for both methods
-6. Be conversational and helpful
-7. Guide customers naturally without rigid commands
 
 Current conversation: ${JSON.stringify(conversationHistory)}`;
 
@@ -555,7 +448,6 @@ Current conversation: ${JSON.stringify(conversationHistory)}`;
 
         const gptResponse = response.data.choices[0].message.content;
         
-        // Update conversation history
         session.conversationHistory.push(
             { role: 'user', content: userMessage },
             { role: 'assistant', content: gptResponse }
@@ -573,9 +465,9 @@ Current conversation: ${JSON.stringify(conversationHistory)}`;
 function getFallbackResponse(message, session) {
     const lowerMessage = message.toLowerCase().trim();
     
-    // Handle greetings - show welcome menu
-    const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
-    if (greetings.some(greeting => lowerMessage.includes(greeting)) || lowerMessage === 'hi' || lowerMessage === 'hello') {
+    // Handle greetings
+    const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'salaam', 'start'];
+    if (greetings.some(greeting => lowerMessage.includes(greeting))) {
         return WELCOME_MENU;
     }
     
@@ -590,18 +482,7 @@ function getFallbackResponse(message, session) {
 ${productMatch.product.description}
 Price: AED ${productMatch.product.price}${productMatch.product.deposit > 0 ? ` + AED ${productMatch.product.deposit} deposit` : ''}
 
-Would you like to place this order? Just say "yes" or let me know if you meant something else!`;
-        } else {
-            return `I'd be happy to help you place an order!
-
-Just tell me what you want in your own words:
-• "bottle" or "water" - for single bottles
-• "coupon" or "bulk" - for coupon books  
-• "cooler" - for water coolers
-• "pump" - for hand pumps
-• "dispenser" - for table dispensers
-
-What would you like today?`;
+Would you like to place this order? Just say "yes"!`;
         }
     }
     
@@ -613,20 +494,20 @@ What would you like today?`;
 ${productMatch.product.description}
 Price: AED ${productMatch.product.price}${productMatch.product.deposit > 0 ? ` + AED ${productMatch.product.deposit} deposit` : ''}
 
-Is this what you want? Say "yes" to order or tell me more about what you need!`;
+Is this what you want? Say "yes" to order!`;
     }
     
     // Pricing questions
-    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-        return `?? COMPLETE PRICING MENU
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost')) {
+        return `?? PRICING MENU
 
 WATER BOTTLES:
 • Single Bottle - AED 7 + AED 15 deposit
 • Trial Bottle - AED 7 + AED 15 deposit
 
-COUPON BOOKS (Better Value):
+COUPON BOOKS:
 • 10+1 Coupon Book - AED 70
-• 100+40 Coupon Book - AED 700 (BNPL available)
+• 100+40 Coupon Book - AED 700
 
 EQUIPMENT:
 • Hand Pump - AED 15
@@ -636,40 +517,16 @@ EQUIPMENT:
 PACKAGES:
 • 140 Bottles + Dispenser - AED 920
 
-Just tell me what you want in your own words!`;
+Just tell me what you want!`;
     }
     
-    // Location/Delivery questions
-    if (lowerMessage.includes('deliver') || lowerMessage.includes('location') || lowerMessage.includes('area') || lowerMessage.includes('address')) {
-        return `?? DELIVERY & LOCATION SERVICES
-
-COVERAGE AREAS:
-Dubai, Sharjah, Ajman (except freezones)
-
-DELIVERY OPTIONS:
-?? **GPS Location**: Share your location for instant verification
-?? **Manual Address**: Type your complete address
-
-DELIVERY FEATURES:
-• Same-day/next-day delivery
-• Weekly scheduled delivery
-• FREE delivery with coupon books
-• Both GPS and manual address accepted
-
-Share your location ?? OR type your address, and I'll confirm if we deliver there!`;
-    }
-
     // Default response
     return `Hello! I'm here to help with our premium water delivery service.
 
-?? QUICK HELP:
-• Just say what you want: "bottle", "cooler", "coupon"
-• "price" - View all prices  
-• "delivery" - Location & delivery info
-• Share your location ?? or type your address
-• Send mobile number - Check account
+Just say what you want: "bottle", "cooler", "coupon"
+Or type "price" for pricing, "delivery" for areas.
 
-I understand natural language, so just tell me what you need!`;
+I understand natural language and spelling mistakes!`;
 }
 
 // Health check endpoint
@@ -678,23 +535,17 @@ app.get('/health', (req, res) => {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         uptime: Math.floor(process.uptime()),
-        memory: process.memoryUsage(),
-        environment: process.env.NODE_ENV || 'development',
-        version: '4.1.0-Dual-Location-System',
+        version: '5.0.0-Final-Dual-Location-Mandatory',
         activeSessions: userSessions.size,
         features: {
-            gptIntegration: !!OPENAI_API_KEY,
-            erpIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
-            keepAlive: !!KEEP_ALIVE_URL,
             smartOrderRecognition: true,
-            gpsLocationServices: true,
-            manualAddressInput: true,
             fuzzyMatching: true,
-            dualLocationSystem: true
+            dualLocationMandatory: true,
+            erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
+            gptIntegration: !!OPENAI_API_KEY
         }
     };
     
-    console.log(`Health check called from ${req.ip} at ${healthData.timestamp}`);
     res.status(200).json(healthData);
 });
 
@@ -712,7 +563,7 @@ app.get('/webhook', (req, res) => {
     }
 });
 
-// Enhanced webhook to receive messages with location support
+// Webhook to receive messages
 app.post('/webhook', (req, res) => {
     const body = req.body;
     
@@ -737,7 +588,7 @@ app.post('/webhook', (req, res) => {
     }
 });
 
-// Enhanced message handling with location and smart order recognition
+// Enhanced message handling
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
@@ -776,35 +627,32 @@ async function handleIncomingMessage(message, phoneNumberId) {
             console.log('Handling order confirmation');
             response = await handleOrderConfirmation(messageBody, session, from);
         }
-        // PRIORITY 4: Handle location or address choice
-        else if (session.state === 'requesting_location_or_address') {
-            console.log('Handling location/address choice');
-            response = await handleLocationOrAddressChoice(messageBody, session, from);
+        // PRIORITY 4: Handle address collection for new customers (Step 1)
+        else if (session.state === 'collecting_address_first') {
+            console.log('Collecting address first (new customer)');
+            response = await handleAddressFirstCollection(messageBody, session, from);
         }
-        // PRIORITY 5: Handle manual address collection
-        else if (session.state === 'collecting_manual_address') {
-            console.log('Collecting manual address');
-            response = await handleManualAddressCollection(messageBody, session, from);
-        }
-        // PRIORITY 6: Handle waiting for location
-        else if (session.state === 'waiting_for_location') {
-            console.log('Waiting for location');
-            response = `Please share your location ?? using the attachment button.
+        // PRIORITY 5: Handle location collection after address (Step 2)
+        else if (session.state === 'collecting_location_after_address') {
+            console.log('Waiting for location after address');
+            response = `Please share your GPS location ?? using the attachment button.
 
-If you prefer to type your address instead, just type your complete address including:
-- Building/villa number
-- Street name and area  
-- City (Dubai/Sharjah/Ajman)
+I already have your address: ${session.orderInProgress.manualAddress}
 
-Which would you prefer?`;
+GPS coordinates needed to complete setup for:
+? Precise location verification
+?? Delivery route optimization
+?? Future order accuracy
+
+Please use WhatsApp's location sharing feature.`;
         }
-        // PRIORITY 7: Check for mobile number lookup
+        // PRIORITY 6: Check for mobile number lookup
         else if (isMobileNumber(messageBody)) {
             console.log('Mobile number detected');
             response = await getCustomerByMobile(messageBody.trim());
             session.customerInfo = response;
         }
-        // PRIORITY 8: Use GPT for conversation
+        // PRIORITY 7: Use GPT for conversation
         else {
             console.log('Using GPT for conversation');
             const context = await buildContextForGPT(session, from);
@@ -814,64 +662,6 @@ Which would you prefer?`;
     
     console.log('Sending response:', response.substring(0, 100) + '...');
     await sendMessage(from, response, phoneNumberId);
-}
-
-// Handle location messages
-async function handleLocationMessage(message, session, userPhone) {
-    const locationData = extractLocationCoordinates(message);
-    
-    if (!locationData) {
-        return 'Sorry, I could not extract location data. Please try sharing your location again.';
-    }
-    
-    console.log('Location received:', locationData);
-    
-    // Validate service area
-    const validation = validateServiceArea(locationData.latitude, locationData.longitude);
-    
-    session.location = {
-        ...locationData,
-        validation: validation,
-        timestamp: Date.now()
-    };
-    
-    // Update customer location in ERPNext
-    await updateCustomerLocation(userPhone, locationData);
-    
-    if (validation.isValid) {
-        session.state = 'active';
-        return `?? Location confirmed! 
-
-?? COORDINATES:
-Latitude: ${locationData.latitude}
-Longitude: ${locationData.longitude}
-${locationData.name ? `Location: ${locationData.name}` : ''}
-
-? SERVICE AREA: ${validation.city.toUpperCase()}
-?? Distance from hub: ${validation.distance.toFixed(1)} km
-
-Great news! We deliver to your area.
-
-${session.orderInProgress ? 
-    'Now let\'s continue with your order!' : 
-    'What would you like to order today? Just tell me what you need!'}`;
-    } else {
-        return `?? Location received!
-
-?? COORDINATES:
-Latitude: ${locationData.latitude}
-Longitude: ${locationData.longitude}
-
-? SERVICE AREA: Outside coverage
-?? Nearest service area: ${validation.nearestCity?.city} (${validation.nearestCity?.distance.toFixed(1)} km away)
-
-?? WE CURRENTLY SERVE:
-• Dubai (50km radius)
-• Sharjah (30km radius)  
-• Ajman (25km radius)
-
-Sorry, your location is outside our current delivery area. We're expanding soon!`;
-    }
 }
 
 // Handle smart order recognition
@@ -896,101 +686,60 @@ async function handleSmartOrder(orderMatch, session, userPhone) {
     
     console.log('Smart order created:', session.orderInProgress);
     
-    // Check if we need location or address
-    if (!session.location && !session.orderInProgress.manualAddress) {
-        session.state = 'requesting_location_or_address';
-        return `Perfect! I understand you want: ${orderMatch.product.name}
+    // Check if customer is new and needs both address and location
+    const isNewCustomer = !session.customerInfo || session.customerInfo.includes('NEW CUSTOMER');
+    
+    if (isNewCustomer) {
+        // New customers need BOTH manual address AND GPS location
+        if (!session.orderInProgress.manualAddress && !session.location) {
+            session.state = 'collecting_address_first';
+            return `Perfect! I understand you want: ${orderMatch.product.name}
 
 ${orderMatch.product.description}
 ?? Price: AED ${orderMatch.product.price}${orderMatch.product.deposit > 0 ? ` + AED ${orderMatch.product.deposit} deposit` : ''}
 
-To proceed, please provide your delivery information:
+As a new customer, I need to collect your complete delivery information:
 
-?? OPTION 1: Share GPS Location
-Use the attachment button to share your location for automatic area verification
-
-?? OPTION 2: Type Manual Address  
-Type your complete address including:
-- Building/villa number
-- Street name and area
-- City (Dubai/Sharjah/Ajman)
-
-Which option would you prefer?`;
-    } else {
-        return await generateOrderConfirmation(session.orderInProgress);
-    }
-}
-
-// Handle choice between GPS location and manual address
-async function handleLocationOrAddressChoice(message, session, userPhone) {
-    const lowerMessage = message.toLowerCase().trim();
-    console.log(`Handling location/address choice: "${lowerMessage}"`);
-    
-    // Check if they're providing a manual address directly
-    if (isManualAddress(lowerMessage)) {
-        console.log('Manual address provided directly');
-        session.orderInProgress.manualAddress = message.trim();
-        session.orderInProgress.deliveryMethod = 'manual_address';
-        
-        const areaValidation = validateManualAddress(message.trim());
-        session.orderInProgress.areaValidation = areaValidation;
-        
-        session.state = 'confirming_order';
-        return await generateOrderConfirmation(session.orderInProgress);
-    }
-    
-    // Check for GPS/location preference
-    if (lowerMessage.includes('location') || lowerMessage.includes('gps') || lowerMessage.includes('share') || lowerMessage === '1') {
-        session.state = 'waiting_for_location';
-        return `Great! Please share your GPS location ?? using the attachment button.
-
-This will help us:
-? Automatically verify your delivery area
-?? Save precise coordinates for delivery
-?? Provide accurate delivery estimates
-
-Please use the ?? location sharing feature in WhatsApp.`;
-    }
-    
-    // Check for manual/address preference  
-    if (lowerMessage.includes('manual') || lowerMessage.includes('address') || lowerMessage.includes('type') || lowerMessage === '2') {
-        session.state = 'collecting_manual_address';
-        return `Perfect! Please provide your complete delivery address:
-
-?? REQUIRED INFORMATION:
+?? STEP 1: Please provide your complete address:
 • Building/Villa number or name
 • Street name
 • Area/Neighborhood  
 • City (Dubai, Sharjah, or Ajman)
-• Any special delivery instructions
+• Any delivery instructions
 
-Example: "Villa 123, Al Wasl Road, Jumeirah, Dubai - Gate is blue color"
+Example: "Villa 123, Al Wasl Road, Jumeirah, Dubai - Blue gate"
 
 Please type your full address:`;
+        } else if (session.orderInProgress.manualAddress && !session.location) {
+            session.state = 'collecting_location_after_address';
+            return `Great! I have your address: ${session.orderInProgress.manualAddress}
+
+?? STEP 2: Now please share your GPS location using the ?? attachment button.
+
+This helps us:
+? Verify your exact location
+?? Optimize delivery routes
+?? Save precise coordinates for future orders
+
+Please share your location to complete the setup.`;
+        } else {
+            return await generateOrderConfirmation(session.orderInProgress);
+        }
+    } else {
+        // Existing customers can proceed with saved info
+        return await generateOrderConfirmation(session.orderInProgress);
     }
-    
-    return `Please choose how to provide your delivery information:
-
-?? **OPTION 1: GPS Location**
-Reply "location" or "GPS" then share your location using ??
-
-?? **OPTION 2: Manual Address** 
-Reply "address" or "manual" to type your address
-
-Or just start typing your address directly!
-
-Which do you prefer?`;
 }
 
-// Handle manual address collection
-async function handleManualAddressCollection(message, session, userPhone) {
+// Handle address collection for new customers (Step 1)
+async function handleAddressFirstCollection(message, session, userPhone) {
     const address = message.trim();
-    console.log('Manual address collected:', address);
+    console.log('Address collected (Step 1 for new customer):', address);
     
     if (address.length < 10) {
         return `Please provide a more complete address including:
 
-?? REQUIRED:
+?? REQUIRED FOR NEW CUSTOMERS:
 • Building/Villa number or name
 • Street name  
 • Area/Neighborhood
@@ -1002,66 +751,111 @@ Please provide your full address:`;
     }
     
     session.orderInProgress.manualAddress = address;
-    session.orderInProgress.deliveryMethod = 'manual_address';
+    session.orderInProgress.deliveryMethod = 'both_address_and_location';
     
     // Validate the area from the address
     const areaValidation = validateManualAddress(address);
     session.orderInProgress.areaValidation = areaValidation;
     
-    session.state = 'confirming_order';
-    return await generateOrderConfirmation(session.orderInProgress);
+    // Move to location collection (Step 2)
+    session.state = 'collecting_location_after_address';
+    
+    return `? Address saved: ${address}
+
+${areaValidation.isValid ? 
+        `? Service Area: ${areaValidation.city} - We deliver there!` : 
+        `?? Area: ${areaValidation.message || 'Please confirm if this is in Dubai/Sharjah/Ajman'}`}
+
+?? STEP 2: Now please share your GPS location using the ?? attachment button.
+
+This completes your delivery setup by providing:
+• Your typed address (for delivery instructions)
+• GPS coordinates (for precise location)
+
+Please share your location now.`;
 }
 
-// Update customer location in ERPNext
-async function updateCustomerLocation(customerPhone, locationData) {
-    try {
-        console.log('Updating customer location in ERPNext...');
+// Handle location messages (enhanced for new customer flow)
+async function handleLocationMessage(message, session, userPhone) {
+    const locationData = extractLocationCoordinates(message);
+    
+    if (!locationData) {
+        return 'Sorry, I could not extract location data. Please try sharing your location again.';
+    }
+    
+    console.log('Location received:', locationData);
+    
+    // Validate service area
+    const validation = validateServiceArea(locationData.latitude, locationData.longitude);
+    
+    session.location = {
+        ...locationData,
+        validation: validation,
+        timestamp: Date.now()
+    };
+    
+    // Update customer location in ERPNext
+    await updateCustomerLocation(userPhone, locationData);
+    
+    // Check if this was part of new customer setup
+    const isNewCustomerSetup = session.state === 'collecting_location_after_address';
+    
+    if (validation.isValid) {
+        session.state = 'active';
         
-        // First, find the customer
-        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
-        const searchResponse = await axios.get(searchUrl, {
-            headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                'Content-Type': 'application/json'
-            },
-            params: {
-                filters: JSON.stringify([['mobile_no', '=', customerPhone]]),
-                fields: JSON.stringify(['name'])
-            }
-        });
+        if (isNewCustomerSetup && session.orderInProgress.manualAddress) {
+            // Complete new customer setup with both address and location
+            return `?? DELIVERY SETUP COMPLETE!
 
-        if (searchResponse.data.data && searchResponse.data.data.length > 0) {
-            const customerName = searchResponse.data.data[0].name;
-            
-            // Update customer with location data
-            const updateData = {
-                custom_latitude: locationData.latitude,
-                custom_longitude: locationData.longitude,
-                custom_location_name: locationData.name || 'GPS Location',
-                custom_location_address: locationData.address || '',
-                custom_location_updated: new Date().toISOString()
-            };
-            
-            await axios.put(
-                `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
-                updateData,
-                {
-                    headers: {
-                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-            
-            console.log('Customer location updated successfully');
+?? MANUAL ADDRESS:
+${session.orderInProgress.manualAddress}
+
+?? GPS COORDINATES:
+Latitude: ${locationData.latitude}
+Longitude: ${locationData.longitude}
+${locationData.name ? `Location: ${locationData.name}` : ''}
+
+? SERVICE AREA: ${validation.city.toUpperCase()}
+?? Distance from hub: ${validation.distance.toFixed(1)} km
+
+Perfect! We now have both your address and precise GPS location for optimal delivery service.
+
+${session.orderInProgress ? 
+                'Ready to confirm your order!' : 
+                'You can now place orders anytime!'}`;
+        } else {
+            // Regular location confirmation
+            return `?? Location confirmed! 
+
+?? COORDINATES:
+Latitude: ${locationData.latitude}
+Longitude: ${locationData.longitude}
+${locationData.name ? `Location: ${locationData.name}` : ''}
+
+? SERVICE AREA: ${validation.city.toUpperCase()}
+?? Distance from hub: ${validation.distance.toFixed(1)} km
+
+${session.orderInProgress ? 
+                'Now let\'s continue with your order!' : 
+                'What would you like to order today?'}`;
         }
-        
-    } catch (error) {
-        console.error('Error updating customer location:', error.response?.data || error.message);
+    } else {
+        return `?? Location received but outside our service area!
+
+?? COORDINATES:
+Latitude: ${locationData.latitude}
+Longitude: ${locationData.longitude}
+
+? SERVICE AREA: Outside coverage
+?? Nearest: ${validation.nearestCity?.city} (${validation.nearestCity?.distance.toFixed(1)} km away)
+
+?? WE SERVE: Dubai, Sharjah, Ajman
+
+Sorry, we're expanding soon to your area!`;
     }
 }
 
-// Order confirmation handling (enhanced)
+// Order confirmation handling
 async function handleOrderConfirmation(message, session, userPhone) {
     const lowerMessage = message.toLowerCase().trim();
     console.log(`Handling confirmation: "${lowerMessage}"`);
@@ -1075,7 +869,7 @@ async function handleOrderConfirmation(message, session, userPhone) {
         session.orderInProgress = null;
         return `Order cancelled. No problem!
 
-Just tell me what you want in your own words:
+Just tell me what you want:
 • "bottle" for water bottles
 • "coupon" for bulk packages  
 • "cooler" for water coolers
@@ -1089,7 +883,7 @@ What can I help you with?`;
         }
         
         return `Please let me know:
-• "YES" or "CONFIRM" to proceed with the order
+• "YES" or "CONFIRM" to proceed
 • "NO" or "CANCEL" to cancel
 • Or tell me what product you actually want
 
@@ -1097,7 +891,7 @@ I'm here to help!`;
     }
 }
 
-// Generate order confirmation (enhanced with location OR manual address)
+// Generate order confirmation (enhanced for new customer dual requirement)
 async function generateOrderConfirmation(orderInfo) {
     const total = orderInfo.product.price + orderInfo.product.deposit;
     const session = userSessions.get(orderInfo.customerPhone);
@@ -1106,25 +900,40 @@ async function generateOrderConfirmation(orderInfo) {
     
     let locationInfo = '';
     
-    // Handle GPS location
-    if (session && session.location) {
+    // For new customers, show both address AND GPS location
+    if (session.orderInProgress.manualAddress && session.location) {
+        locationInfo = `
+?? COMPLETE DELIVERY INFORMATION:
+
+?? MANUAL ADDRESS:
+${session.orderInProgress.manualAddress}
+
+?? GPS COORDINATES:
+Latitude: ${session.location.latitude}
+Longitude: ${session.location.longitude}
+${session.location.name ? `Location Name: ${session.location.name}` : ''}
+
+? SERVICE AREA: ${session.location.validation.isValid ? session.location.validation.city.toUpperCase() : 'VERIFIED'}
+?? Perfect delivery accuracy guaranteed!`;
+    }
+    // Handle GPS location only (existing customers)
+    else if (session && session.location) {
         locationInfo = `
 ?? DELIVERY LOCATION (GPS):
-${session.location.name || 'GPS Location'}
 Coordinates: ${session.location.latitude}, ${session.location.longitude}
 ${session.location.validation.isValid ? 
-    `? Service Area: ${session.location.validation.city}` : 
-    '? Outside service area'}`;
+            `? Service Area: ${session.location.validation.city}` : 
+            '? Outside service area'}`;
     }
-    // Handle manual address
+    // Handle manual address only (fallback)
     else if (orderInfo.manualAddress) {
         const validation = orderInfo.areaValidation;
         locationInfo = `
-?? DELIVERY ADDRESS (Manual):
+?? DELIVERY ADDRESS:
 ${orderInfo.manualAddress}
 ${validation.isValid ? 
-    `? Service Area: ${validation.city} (${validation.confidence} confidence)` : 
-    `? Area validation: ${validation.message || 'Please confirm delivery area'}`}`;
+            `? Service Area: ${validation.city}` : 
+            `? Area validation: ${validation.message || 'Please confirm delivery area'}`}`;
     }
     
     session.state = 'confirming_order';
@@ -1141,10 +950,10 @@ ${locationInfo}
 
 ?? Payment: Cash/Card on delivery
 
-Reply "YES" to confirm your order or "NO" to cancel.`;
+Reply "YES" to confirm or "NO" to cancel.`;
 }
 
-// Enhanced order processing with location OR manual address data
+// Enhanced order processing
 async function processOrder(session, userPhone) {
     try {
         console.log('Processing order with location/address data...');
@@ -1158,7 +967,7 @@ async function processOrder(session, userPhone) {
         // Add location or address data to order
         if (session.location) {
             orderInfo.deliveryLocation = session.location;
-            orderInfo.deliveryMethod = 'gps_location';
+            orderInfo.deliveryMethod = 'both_address_and_location';
         } else if (orderInfo.manualAddress) {
             orderInfo.deliveryMethod = 'manual_address';
             orderInfo.deliveryAddress = orderInfo.manualAddress;
@@ -1190,26 +999,24 @@ Please try again or contact our support team.`;
             session.salesStage = 'completed';
             
             let deliveryInfo = '';
-            if (session.location) {
-                deliveryInfo = `?? Delivery Location: ${session.location.name || 'GPS Location'}\nCoordinates: ${session.location.latitude}, ${session.location.longitude}\n`;
+            if (session.location && orderInfo.manualAddress) {
+                deliveryInfo = `?? Address: ${orderInfo.manualAddress}\n?? GPS: ${session.location.latitude}, ${session.location.longitude}\n`;
+            } else if (session.location) {
+                deliveryInfo = `?? GPS Location: ${session.location.latitude}, ${session.location.longitude}\n`;
             } else if (orderInfo.manualAddress) {
-                deliveryInfo = `?? Delivery Address: ${orderInfo.manualAddress}\n`;
+                deliveryInfo = `?? Address: ${orderInfo.manualAddress}\n`;
             }
             
             return `? ORDER CONFIRMED SUCCESSFULLY!
 
 ?? Order Number: ${erpOrder.orderName}
 ?? Product: ${orderInfo.product.name}  
-?? Total Amount: AED ${orderInfo.product.price + orderInfo.product.deposit}
+?? Total: AED ${orderInfo.product.price + orderInfo.product.deposit}
 ${deliveryInfo}
 ?? NEXT STEPS:
-• Our delivery team will contact you within 2 hours
-• ${session.location ? 'GPS coordinates saved for accurate delivery' : 'Address saved for delivery coordination'}
+• Delivery team will contact you within 2 hours
+• Complete delivery information saved
 • Payment: Cash/Card on delivery
-
-DELIVERY AREAS: Dubai, Sharjah, Ajman
-
-Need to modify your order? Just message us!
 
 Thank you for choosing our premium water service! ??`;
         } else {
@@ -1221,11 +1028,55 @@ Thank you for choosing our premium water service! ??`;
         console.error('Error processing order:', error);
         return `ORDER PROCESSING ERROR
 
-Technical issue occurred while processing your order.
-Our team has been notified.
+Technical issue occurred. Our team has been notified.
+Please try again in a few minutes.`;
+    }
+}
 
-Please try again in a few minutes or contact support directly.
-Order details have been saved.`;
+// Update customer location in ERPNext
+async function updateCustomerLocation(customerPhone, locationData) {
+    try {
+        console.log('Updating customer location in ERPNext...');
+        
+        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        const searchResponse = await axios.get(searchUrl, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                filters: JSON.stringify([['mobile_no', '=', customerPhone]]),
+                fields: JSON.stringify(['name'])
+            }
+        });
+
+        if (searchResponse.data.data && searchResponse.data.data.length > 0) {
+            const customerName = searchResponse.data.data[0].name;
+            
+            const updateData = {
+                custom_latitude: locationData.latitude,
+                custom_longitude: locationData.longitude,
+                custom_location_name: locationData.name || 'GPS Location',
+                custom_location_address: locationData.address || '',
+                custom_location_updated: new Date().toISOString()
+            };
+            
+            await axios.put(
+                `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
+                updateData,
+                {
+                    headers: {
+                        'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            
+            console.log('Customer location updated successfully');
+        }
+        
+    } catch (error) {
+        console.error('Error updating customer location:', error.response?.data || error.message);
     }
 }
 
@@ -1235,7 +1086,7 @@ function isMobileNumber(text) {
     return mobileRegex.test(text.trim()) && text.length < 20;
 }
 
-// Build context for GPT (enhanced with location)
+// Build context for GPT
 async function buildContextForGPT(session, userPhone) {
     let context = '';
     
@@ -1247,23 +1098,6 @@ async function buildContextForGPT(session, userPhone) {
         context += `CUSTOMER LOCATION:\n`;
         context += `Coordinates: ${session.location.latitude}, ${session.location.longitude}\n`;
         context += `Area: ${session.location.validation.isValid ? session.location.validation.city : 'Outside service area'}\n\n`;
-    }
-    
-    if (Object.values(session.qualification).some(v => v !== null)) {
-        context += `CUSTOMER QUALIFICATION:\n`;
-        Object.entries(session.qualification).forEach(([key, value]) => {
-            if (value) context += `${key}: ${value}\n`;
-        });
-        context += '\n';
-    }
-    
-    if (session.interests.length > 0) {
-        context += `CUSTOMER INTERESTS:\n`;
-        session.interests.forEach(productKey => {
-            const product = PRODUCTS[productKey];
-            if (product) context += `- ${product.name}: ${product.description}\n`;
-        });
-        context += '\n';
     }
     
     context += `SALES STAGE: ${session.salesStage}\n`;
@@ -1322,24 +1156,32 @@ async function createERPNextCustomer(orderInfo) {
             territory: 'UAE'
         };
         
-        // Add GPS location data if available
+        // Add both GPS and manual address data for new customers
         const session = userSessions.get(orderInfo.customerPhone);
         if (session && session.location) {
+            // GPS location data
             customerData.custom_latitude = session.location.latitude;
             customerData.custom_longitude = session.location.longitude;
             customerData.custom_location_name = session.location.name || 'GPS Location';
             customerData.custom_location_updated = new Date().toISOString();
-            customerData.custom_address_type = 'gps_location';
         }
-        // Add manual address data if available
-        else if (orderInfo.manualAddress) {
+        
+        if (orderInfo.manualAddress) {
+            // Manual address data
             customerData.custom_manual_address = orderInfo.manualAddress;
-            customerData.custom_address_type = 'manual_address';
             if (orderInfo.areaValidation) {
                 customerData.custom_delivery_city = orderInfo.areaValidation.city;
                 customerData.custom_address_validation = orderInfo.areaValidation.confidence;
             }
-            customerData.custom_location_updated = new Date().toISOString();
+        }
+        
+        // Set address type based on what we have
+        if (session && session.location && orderInfo.manualAddress) {
+            customerData.custom_address_type = 'both_address_and_gps';
+        } else if (session && session.location) {
+            customerData.custom_address_type = 'gps_location';
+        } else if (orderInfo.manualAddress) {
+            customerData.custom_address_type = 'manual_address';
         }
         
         const response = await axios.post(
@@ -1391,22 +1233,31 @@ async function createERPNextOrder(orderInfo, customerName) {
             custom_order_source: 'WhatsApp Bot Dual Location System'
         };
         
-        // Add GPS location data if available
+        // Add both GPS and manual address data for comprehensive order information
         if (orderInfo.deliveryLocation) {
+            // GPS location data
             orderData.custom_delivery_latitude = orderInfo.deliveryLocation.latitude;
             orderData.custom_delivery_longitude = orderInfo.deliveryLocation.longitude;
             orderData.custom_delivery_location_name = orderInfo.deliveryLocation.name;
-            orderData.custom_delivery_address = orderInfo.deliveryLocation.address || 'GPS Location';
-            orderData.custom_delivery_method = 'gps_location';
         }
-        // Add manual address data if available
-        else if (orderInfo.deliveryAddress) {
-            orderData.custom_delivery_address = orderInfo.deliveryAddress;
+        
+        if (orderInfo.deliveryAddress || orderInfo.manualAddress) {
+            // Manual address data
+            orderData.custom_delivery_address = orderInfo.deliveryAddress || orderInfo.manualAddress;
+        }
+        
+        // Set delivery method based on what information we have
+        if (orderInfo.deliveryLocation && (orderInfo.deliveryAddress || orderInfo.manualAddress)) {
+            orderData.custom_delivery_method = 'both_address_and_gps';
+        } else if (orderInfo.deliveryLocation) {
+            orderData.custom_delivery_method = 'gps_location';
+        } else if (orderInfo.deliveryAddress || orderInfo.manualAddress) {
             orderData.custom_delivery_method = 'manual_address';
-            if (orderInfo.areaValidation) {
-                orderData.custom_delivery_city = orderInfo.areaValidation.city;
-                orderData.custom_address_confidence = orderInfo.areaValidation.confidence;
-            }
+        }
+        
+        if (orderInfo.areaValidation) {
+            orderData.custom_delivery_city = orderInfo.areaValidation.city;
+            orderData.custom_address_confidence = orderInfo.areaValidation.confidence;
         }
         
         // Add deposit as separate line item if applicable
@@ -1489,13 +1340,7 @@ Please contact support or try a different product.`;
     return `ORDER PROCESSING ISSUE
 
 Technical issue encountered. Our team has been notified.
-
-WHAT TO DO:
-• Try again in a few minutes
-• Contact support directly  
-• Your details have been saved
-
-We'll resolve this quickly!`;
+Please try again in a few minutes.`;
 }
 
 async function getCustomerByMobile(mobileNumber) {
@@ -1531,7 +1376,9 @@ Mobile: ${customer.mobile_no}`;
 
 ?? SAVED GPS LOCATION:
 Coordinates: ${customer.custom_latitude}, ${customer.custom_longitude}`;
-            } else if (customer.custom_manual_address) {
+            }
+            
+            if (customer.custom_manual_address) {
                 responseText += `
 
 ?? SAVED ADDRESS:
@@ -1552,12 +1399,7 @@ Examples: "bottle", "cooler", "coupon"`;
 No customer found with mobile: ${mobileNumber}
 
 Ready to place your first order?
-Just tell me what you want:
-• "bottle" for water bottles
-• "cooler" for water coolers  
-• "coupon" for bulk packages
-
-I'll guide you through the process!`;
+Just tell me what you want and I'll guide you through the setup!`;
         }
         
     } catch (error) {
@@ -1588,7 +1430,7 @@ async function sendMessage(to, message, phoneNumberId) {
     }
 }
 
-// Test smart matching endpoint
+// Test endpoints
 app.get('/test-smart-match', (req, res) => {
     const testInputs = [
         'i want bottle',
@@ -1619,7 +1461,6 @@ app.get('/test-smart-match', (req, res) => {
     });
 });
 
-// Test manual address validation endpoint
 app.get('/test-manual-address', (req, res) => {
     const testAddresses = [
         'Villa 123, Al Wasl Road, Jumeirah, Dubai',
@@ -1627,9 +1468,7 @@ app.get('/test-manual-address', (req, res) => {
         'Tower 78, Al Nuaimiya, Ajman',
         'House 12, Deira, Dubai',
         'Apartment 34, Al Nahda, Sharjah',
-        'Office 56, Marina, Dubai',
-        'Some random address without city',
-        'Block 9, Abu Dhabi'
+        'Office 56, Marina, Dubai'
     ];
     
     const results = testAddresses.map(address => {
@@ -1638,8 +1477,7 @@ app.get('/test-manual-address', (req, res) => {
             address: address,
             isValid: validation.isValid,
             city: validation.city || 'Unknown',
-            confidence: validation.confidence,
-            method: validation.method
+            confidence: validation.confidence
         };
     });
     
@@ -1650,84 +1488,10 @@ app.get('/test-manual-address', (req, res) => {
     });
 });
 
-// Test location validation endpoint (enhanced)
-app.get('/test-location', (req, res) => {
-    const testLocations = [
-        { lat: 25.2048, lng: 55.2708, name: 'Dubai Center' },
-        { lat: 25.3463, lng: 55.4209, name: 'Sharjah Center' },
-        { lat: 25.4052, lng: 55.5136, name: 'Ajman Center' },
-        { lat: 24.4539, lng: 54.3773, name: 'Abu Dhabi (outside)' }
-    ];
-    
-    const results = testLocations.map(loc => {
-        const validation = validateServiceArea(loc.lat, loc.lng);
-        return {
-            location: loc.name,
-            coordinates: `${loc.lat}, ${loc.lng}`,
-            isValid: validation.isValid,
-            city: validation.city || 'Outside',
-            distance: validation.distance || 'N/A'
-        };
-    });
-    
-    res.json({
-        status: 'success',
-        message: 'Location validation test results',
-        results: results
-    });
-});
-
-// Test endpoints
-app.get('/test-gpt', async (req, res) => {
-    try {
-        const testMessage = "hi";
-        const testSession = createUserSession();
-        
-        const response = await getGPTResponse(testMessage, testSession);
-        
-        res.json({
-            status: 'success',
-            message: 'GPT integration working!',
-            testMessage: testMessage,
-            response: response
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'error',
-            message: 'GPT integration failed',
-            error: error.message
-        });
-    }
-});
-
-app.get('/test-erpnext', async (req, res) => {
-    try {
-        const response = await axios.get(`${ERPNEXT_URL}/api/method/frappe.auth.get_logged_user`, {
-            headers: {
-                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        res.json({ 
-            status: 'success', 
-            message: 'ERPNext connection working!', 
-            data: response.data 
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            status: 'error', 
-            message: 'ERPNext connection failed', 
-            error: error.response?.data || error.message
-        });
-    }
-});
-
-// Analytics endpoint (enhanced)
 app.get('/analytics', (req, res) => {
     const analytics = {
         totalSessions: userSessions.size,
         salesStages: {},
-        topInterests: {},
         activeOrders: 0,
         locationsReceived: 0,
         manualAddresses: 0,
@@ -1737,11 +1501,6 @@ app.get('/analytics', (req, res) => {
     userSessions.forEach(session => {
         analytics.salesStages[session.salesStage] = 
             (analytics.salesStages[session.salesStage] || 0) + 1;
-        
-        session.interests.forEach(interest => {
-            analytics.topInterests[interest] = 
-                (analytics.topInterests[interest] || 0) + 1;
-        });
         
         if (session.orderInProgress) {
             analytics.activeOrders++;
@@ -1761,38 +1520,6 @@ app.get('/analytics', (req, res) => {
     res.json(analytics);
 });
 
-// Test order endpoint
-app.post('/test-order', async (req, res) => {
-    try {
-        const { phone = '+971501234567', product = 'single_bottle', address = 'Test Address, Dubai' } = req.body;
-        
-        const testSession = createUserSession();
-        testSession.orderInProgress = {
-            product: PRODUCTS[product],
-            productKey: product,
-            quantity: 1,
-            customerPhone: phone,
-            manualAddress: address,
-            deliveryMethod: 'manual_address',
-            areaValidation: validateManualAddress(address)
-        };
-        
-        const result = await processOrder(testSession, phone);
-        
-        res.json({
-            status: 'success',
-            message: 'Test order processed',
-            result: result
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'error',
-            message: 'Test order failed',
-            error: error.message
-        });
-    }
-});
-
 // Session cleanup
 setInterval(() => {
     const now = Date.now();
@@ -1806,13 +1533,13 @@ setInterval(() => {
     }
 }, 30 * 60 * 1000);
 
-// Enhanced homepage
+// Homepage
 app.get('/', (req, res) => {
     const statusHtml = `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Enhanced WhatsApp Bot - Smart Recognition + Dual Location System</title>
+        <title>WhatsApp Bot Final - Smart Recognition + Mandatory Dual Location</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1821,7 +1548,6 @@ app.get('/', (req, res) => {
             .endpoint { margin: 10px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #007bff; font-family: monospace; }
             .active { color: #28a745; font-weight: bold; }
             .inactive { color: #ffc107; }
-            .new { color: #007bff; font-weight: bold; }
             h1 { color: #333; text-align: center; }
             h2, h3 { color: #007bff; }
             .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
@@ -1829,11 +1555,11 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>?? Enhanced WhatsApp Water Delivery Bot v4.1</h1>
+            <h1>?? WhatsApp Bot Final v5.0</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">DUAL LOCATION SYSTEM ENABLED</span></h2>
-                <p><strong>Version:</strong> 4.1.0 (Smart Order Recognition + GPS + Manual Address)</p>
+                <h2>Status: <span class="active">DUAL LOCATION MANDATORY FOR NEW CUSTOMERS</span></h2>
+                <p><strong>Version:</strong> 5.0.0 (Smart Recognition + Mandatory Address + GPS)</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>GPT Integration:</strong> <span class="${OPENAI_API_KEY ? 'active' : 'inactive'}">${OPENAI_API_KEY ? 'ENABLED' : 'DISABLED'}</span></p>
                 <p><strong>ERPNext:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
@@ -1850,7 +1576,7 @@ app.get('/', (req, res) => {
                 </div>
                 
                 <div>
-                    <h3>?? DUAL LOCATION REQUIREMENT:</h3>
+                    <h3>?? MANDATORY DUAL LOCATION:</h3>
                     <div class="feature">? NEW CUSTOMERS: Both manual address + GPS required</div>
                     <div class="feature">? Manual address entry (Step 1)</div>
                     <div class="feature">? GPS location sharing (Step 2)</div>
@@ -1875,18 +1601,14 @@ app.get('/', (req, res) => {
 
             <h3>?? TEST ENDPOINTS:</h3>
             <div class="endpoint"><strong>/test-smart-match</strong> - Test smart order recognition</div>
-            <div class="endpoint"><strong>/test-location</strong> - Test GPS validation</div>
             <div class="endpoint"><strong>/test-manual-address</strong> - Test manual address validation</div>
-            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT integration</div>
-            <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
             <div class="endpoint"><strong>/analytics</strong> - Enhanced session analytics</div>
             
-            <h3>?? ERPNEXT CUSTOM FIELDS:</h3>
-            <div class="endpoint"><strong>GPS Fields:</strong> custom_latitude, custom_longitude, custom_location_name</div>
-            <div class="endpoint"><strong>Manual Address Fields:</strong> custom_manual_address, custom_delivery_city</div>
-            <div class="endpoint"><strong>Order Fields:</strong> custom_delivery_method, custom_address_confidence</div>
-            <div class="endpoint"><strong>Validation Fields:</strong> custom_address_type, custom_address_validation</div>
-            <div class="endpoint"><strong>Delivery Fields:</strong> custom_delivery_latitude, custom_delivery_longitude</div>
+            <h3>?? ERPNEXT INTEGRATION:</h3>
+            <div class="endpoint"><strong>Customer Fields:</strong> custom_latitude, custom_longitude, custom_manual_address</div>
+            <div class="endpoint"><strong>Address Type:</strong> custom_address_type = 'both_address_and_gps'</div>
+            <div class="endpoint"><strong>Order Method:</strong> custom_delivery_method = 'both_address_and_gps'</div>
+            <div class="endpoint"><strong>Complete Data:</strong> Both GPS coordinates and manual address saved</div>
         </div>
     </body>
     </html>
@@ -1895,10 +1617,10 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? ENHANCED WhatsApp Water Delivery Bot v4.1 running on port ${PORT}`);
-    console.log('? Smart Order Recognition + GPS Location + Manual Address + ERPNext Integration');
+    console.log(`?? WhatsApp Water Delivery Bot FINAL v5.0 running on port ${PORT}`);
+    console.log('? Smart Order Recognition + Mandatory Dual Location for New Customers');
     console.log(`?? URL: http://localhost:${PORT}`);
-    console.log('?? Features: Fuzzy Matching, Natural Language, Dual Location System, Complete Flexibility');
+    console.log('?? Features: Natural Language, Fuzzy Matching, Mandatory Address+GPS for New Customers');
     
     if (!OPENAI_API_KEY) {
         console.warn('??  OPENAI_API_KEY not set');
