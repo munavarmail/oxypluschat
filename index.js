@@ -31,11 +31,11 @@ const WELCOME_MENU = `WELCOME TO PREMIUM WATER DELIVERY SERVICE!
 Choose what you'd like to do:
 
 PLACE ORDER
-Type: "order [product name]"
-Examples:
-• order single bottle
-• order coupon book
-• order premium cooler
+Just tell me what you want:
+• "I want single bottle"
+• "Give me coupon book"  
+• "I need premium cooler"
+• Or any natural way!
 
 VIEW PRICING
 Type: "pricing" or "menu"
@@ -61,7 +61,7 @@ Type: "offers" or "deals"
 COMPANY INFO
 Type: "about us"
 
-Just type what you need or ask me anything!`;
+Just tell me what you need - I understand natural language!`;
 
 // Product catalog with enhanced descriptions
 const PRODUCTS = {
