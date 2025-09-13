@@ -551,7 +551,7 @@ async function validateDeliveryLocation(latitude, longitude) {
     }
 }
 
-// Process manually typed address and save to ERPNext
+// Process manually typed address with simplified validation
 async function processManualAddress(address, session, userPhone) {
     console.log(`Processing manual address: ${address}`);
     
@@ -560,27 +560,19 @@ async function processManualAddress(address, session, userPhone) {
     const foundCity = validCities.find(city => lowerAddress.includes(city));
     
     if (!foundCity) {
-        return `Please include the city in your address. We deliver to Dubai, Sharjah, and Ajman.
+        return `Please include your city (Dubai, Sharjah, or Ajman) in your address.
 
-Example format:
-"Villa 123, Al Noor Street
-Business Bay, Dubai"
+Example: "Building 123, Business Bay, Dubai"
 
-Please provide your complete address with city:`;
+Type your complete address:`;
     }
     
-    if (address.length < 15) {
-        return `Please provide a more detailed address:
+    if (address.length < 10) {
+        return `Please provide more details in your address.
 
-Required information:
-- Building/Villa name and number
-- Street name  
-- Area/District
-- City
+Example: "Villa 456, Al Noor Street, Sharjah"
 
-Your current address: "${address}"
-
-Please add more details:`;
+Type your complete address:`;
     }
     
     // Address looks good, save it
@@ -599,28 +591,25 @@ Please add more details:`;
     if (session.state === 'new_customer_setup' || session.state === 'collecting_address') {
         if (session.isExistingCustomer) {
             session.state = 'address_confirmed';
-            return `Address saved to your profile:
-${address}
+            return `Address saved: ${address}
 
 Ready to order? Just say:
 "I want single bottle"
 "Give me coupon book"
 "Send premium cooler"
 
-What would you like to order?`;
+What would you like?`;
         } else {
             session.state = 'collecting_customer_name';
-            return `Address confirmed:
-${address}
+            return `Address saved: ${address}
 
-Now I need your name for delivery. What name should I use for your orders?`;
+What name should I use for delivery?`;
         }
     }
     
-    return `Address updated:
-${address}
+    return `Address updated: ${address}
 
-Ready to order? Just say what you want!`;
+What would you like to order?`;
 }
 
 // Save address to existing customer in ERPNext
