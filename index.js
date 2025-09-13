@@ -1369,60 +1369,117 @@ async function sendMessage(to, message, phoneNumberId) {
     }
 }
 
-// Test endpoints
-app.get('/test-flexible-order', async (req, res) => {
+// Test complete order process
+app.post('/test-complete-order', async (req, res) => {
     try {
-        const testMessages = [
-            "I want single bottle",
-            "Give me coupon book",
-            "I need premium cooler",
-            "Can I get water delivery"
-        ];
+        const { phone = '+971501234567', product = 'single_bottle', address = 'Test Address, Dubai' } = req.body;
         
-        const results = [];
+        console.log('=== TESTING COMPLETE ORDER PROCESS ===');
+        console.log('Phone:', phone);
+        console.log('Product:', product);
+        console.log('Address:', address);
         
-        for (const testMessage of testMessages) {
-            const testSession = createUserSession();
-            const isOrderIntent = detectOrderingIntent(testMessage);
-            results.push({
-                message: testMessage,
-                isOrderIntent: isOrderIntent,
-                response: isOrderIntent ? 'Order detected' : 'No order intent'
-            });
-        }
+        const testSession = createUserSession();
+        testSession.orderInProgress = {
+            product: PRODUCTS[product],
+            productKey: product,
+            quantity: 1,
+            customerPhone: phone,
+            address: address
+        };
+        
+        console.log('Test Order Info:', JSON.stringify(testSession.orderInProgress, null, 2));
+        
+        const result = await processOrder(testSession, phone);
         
         res.json({
             status: 'success',
-            message: 'Flexible ordering test completed',
-            results: results
+            message: 'Test order completed',
+            orderInfo: testSession.orderInProgress,
+            result: result,
+            timestamp: new Date().toISOString()
         });
+        
     } catch (error) {
+        console.error('Test order failed:', error);
         res.status(500).json({
             status: 'error',
-            message: 'Flexible ordering test failed',
-            error: error.message
+            message: 'Test order failed',
+            error: error.message,
+            stack: error.stack
         });
     }
 });
 
-app.get('/test-erpnext', async (req, res) => {
+// Debug ERPNext configuration
+app.get('/debug-erpnext-config', (req, res) => {
+    res.json({
+        status: 'debug',
+        config: {
+            url: ERPNEXT_URL || 'NOT SET',
+            hasApiKey: !!ERPNEXT_API_KEY,
+            hasApiSecret: !!ERPNEXT_API_SECRET,
+            apiKeyLength: ERPNEXT_API_KEY ? ERPNEXT_API_KEY.length : 0,
+            apiSecretLength: ERPNEXT_API_SECRET ? ERPNEXT_API_SECRET.length : 0
+        },
+        products: Object.keys(PRODUCTS),
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Test ERPNext connection with detailed info
+app.get('/test-erpnext-detailed', async (req, res) => {
     try {
-        const response = await axios.get(`${ERPNEXT_URL}/api/method/frappe.auth.get_logged_user`, {
+        console.log('=== TESTING ERPNEXT CONNECTION ===');
+        console.log('URL:', ERPNEXT_URL);
+        console.log('API Key exists:', !!ERPNEXT_API_KEY);
+        console.log('API Secret exists:', !!ERPNEXT_API_SECRET);
+        
+        // Test basic connection
+        const authResponse = await axios.get(`${ERPNEXT_URL}/api/method/frappe.auth.get_logged_user`, {
             headers: {
                 'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 10000
         });
+        
+        console.log('Auth Response:', authResponse.data);
+        
+        // Test customer access
+        const customerResponse = await axios.get(`${ERPNEXT_URL}/api/resource/Customer`, {
+            headers: {
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                limit: 1
+            },
+            timeout: 10000
+        });
+        
+        console.log('Customer Response:', customerResponse.data);
+        
         res.json({ 
             status: 'success', 
-            message: 'ERPNext connection working!', 
-            data: response.data 
+            message: 'ERPNext connection working!',
+            authTest: authResponse.data,
+            customerTest: customerResponse.data,
+            config: {
+                url: ERPNEXT_URL,
+                connected: true
+            }
         });
     } catch (error) {
+        console.error('ERPNext test failed:', error.response?.data || error.message);
         res.status(500).json({ 
             status: 'error', 
             message: 'ERPNext connection failed', 
-            error: error.response?.data || error.message
+            error: error.response?.data || error.message,
+            config: {
+                url: ERPNEXT_URL || 'NOT SET',
+                hasCredentials: !!(ERPNEXT_API_KEY && ERPNEXT_API_SECRET)
+            }
         });
     }
 });
