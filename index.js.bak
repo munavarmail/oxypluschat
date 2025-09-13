@@ -9,11 +9,11 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// OpenAI Configuration for GPT-4.1 mini
+// OpenAI Configuration for GPT-4o-mini
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// ERPNext Configuration (updated for ERPNext compatibility)
+// ERPNext Configuration
 const ERPNEXT_URL = process.env.ERPNEXT_URL || process.env.DOTORDERS_ERP_URL;
 const ERPNEXT_API_KEY = process.env.ERPNEXT_API_KEY || process.env.DOTORDERS_ERP_API_KEY;
 const ERPNEXT_API_SECRET = process.env.ERPNEXT_API_SECRET || process.env.DOTORDERS_ERP_API_SECRET;
@@ -25,17 +25,18 @@ const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000;
 // Enhanced conversation state management
 const userSessions = new Map();
 
-// Welcome menu options
+// Welcome menu with flexible ordering
 const WELCOME_MENU = `WELCOME TO PREMIUM WATER DELIVERY SERVICE!
 
 Choose what you'd like to do:
 
 PLACE ORDER
-Just tell me what you want:
+Just tell me what you want naturally:
 • "I want single bottle"
 • "Give me coupon book"  
 • "I need premium cooler"
-• Or any natural way!
+• "Can I get water delivery"
+• Or any way that feels natural!
 
 VIEW PRICING
 Type: "pricing" or "menu"
@@ -89,7 +90,7 @@ const PRODUCTS = {
         deposit: 0, 
         item_code: 'Table Dispenser',
         description: 'Basic table top dispenser for convenient water access',
-        keywords: ['table', 'dispenser', 'basic', 'simple'],
+        keywords: ['table', 'dispenser', 'basic', 'simple', 'stand'],
         salesPoints: ['No electricity needed', 'Compact design', 'Easy to use']
     },
     'hand_pump': { 
@@ -116,7 +117,7 @@ const PRODUCTS = {
         deposit: 0, 
         item_code: 'Coupon Book',
         description: '11 bottles (10+1 free), up to 3 bottles without deposit',
-        keywords: ['10+1', 'eleven', 'coupon book', 'small package', '11 bottles'],
+        keywords: ['10+1', 'eleven', 'coupon book', 'small package', '11 bottles', 'coupon'],
         salesPoints: ['Save on deposit', 'Free bottle included', 'Better per-bottle price', 'Priority delivery']
     },
     'coupon_100_40': { 
@@ -125,7 +126,7 @@ const PRODUCTS = {
         deposit: 0, 
         item_code: 'Coupon Book',
         description: '140 bottles total, up to 5 bottles without deposit, BNPL available',
-        keywords: ['100+40', '140', 'bulk', 'large package', 'bnpl', '140 bottles'],
+        keywords: ['100+40', '140', 'bulk', 'large package', 'bnpl', '140 bottles', 'coupon'],
         salesPoints: ['Best value for money', 'Buy now pay later option', 'Huge savings', 'No deposit for 5 bottles', 'Priority service']
     },
     'premium_package': { 
@@ -134,12 +135,12 @@ const PRODUCTS = {
         deposit: 0, 
         item_code: 'Premium Package',
         description: '140 bottles + Premium dispenser package - complete solution',
-        keywords: ['premium package', 'complete', 'dispenser included', 'combo'],
+        keywords: ['premium package', 'complete', 'dispenser included', 'combo', 'package'],
         salesPoints: ['Complete water solution', 'Premium dispenser included', 'Maximum convenience', 'Best overall value']
     }
 };
 
-// Enhanced knowledge base with context for GPT and order prompts
+// Enhanced knowledge base
 const KNOWLEDGE_BASE = `
 COMPANY INFORMATION:
 - Water delivery service operating in Dubai, Sharjah, Ajman (except freezones)
@@ -158,15 +159,8 @@ PRODUCTS AND PRICING:
 7. 100+40 Coupon Book - AED 700 (140 bottles, best value, BNPL available)
 8. Premium Package - AED 920 (140 bottles + premium dispenser)
 
-WELCOME MENU RESPONSES:
-When customers greet with "hi", "hello", "hey", etc., show the complete welcome menu with all available options.
-
-ORDER PROCESS:
-To place an order, customers should:
-1. Type "order [product name]" (e.g., "order single bottle", "order coupon book")
-2. Provide delivery address if new customer
-3. Confirm order details
-4. Choose payment method (cash/card on delivery)
+FLEXIBLE ORDERING:
+Accept natural language ordering - customers can say "I want...", "Give me...", "I need...", etc.
 
 PAYMENT METHODS:
 - Cash payment on delivery
@@ -180,8 +174,6 @@ DELIVERY INFORMATION:
 - Weekly scheduled delivery options
 - Free delivery with coupon books
 - Standard charges for individual bottles
-
-IMPORTANT: Always guide customers to place orders by typing "order [product name]"
 `;
 
 // Enhanced user session structure
@@ -233,27 +225,34 @@ function startKeepAlive() {
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// GPT-4o-mini integration for intelligent conversations
+// GPT-4o-mini integration with flexible ordering
 async function getGPTResponse(userMessage, session, context = '') {
     try {
-        const conversationHistory = session.conversationHistory.slice(-8); // Last 8 messages for context
+        const conversationHistory = session.conversationHistory.slice(-8);
         
         const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE. 
 
 GREETING HANDLING:
 When customers greet with "hi", "hello", "hey", "good morning", etc., show them the complete welcome menu with all available options.
 
-IMPORTANT ORDER INSTRUCTIONS:
-When customers want to place an order, ALWAYS guide them to use the specific format:
-"To place an order, please type: order [product name]"
+FLEXIBLE ORDER HANDLING:
+Customers can express ordering intent in many natural ways. Accept and process ANY of these expressions:
+- "I want single bottle"
+- "I need water delivery" 
+- "Can I get a coupon book"
+- "Give me premium cooler"
+- "I'd like to buy hand pump"
+- "Send me dispenser"
+- "Get me 10+1 package"
+- "I want to purchase..."
 
-Examples:
-- "order single bottle"
-- "order coupon book" 
-- "order premium cooler"
-- "order 10+1 coupon book"
+When customers show ordering intent, guide the conversation to:
+1. Identify the specific product they want
+2. Collect delivery address if needed  
+3. Confirm order details
+4. Process the order in ERPNext
 
-Do NOT try to process orders yourself - always direct them to use the "order" command.
+Be flexible and natural - don't force rigid command formats.
 
 CONTEXT:
 ${KNOWLEDGE_BASE}
@@ -263,32 +262,13 @@ ${context}
 CONVERSATION GUIDELINES:
 1. For greetings, show the complete welcome menu with all options
 2. Be helpful, professional, and sales-oriented
-3. Qualify customers by understanding their needs
+3. Accept natural language for ordering
 4. Recommend appropriate products based on consumption
-5. Guide customers to place orders using "order [product]" format
-6. Handle objections with value propositions
-7. Ask qualifying questions (usage, location, current supplier)
-8. Be conversational and natural
-9. Show clear pricing and benefits
-10. End with call to action
-
-AVAILABLE SERVICES TO MENTION:
-- Order placement
-- Pricing information
-- Delivery details
-- Payment methods
-- Customer support
-- Complaint handling
-- Account lookup
-- Special offers
-- Company information
-
-PRODUCT RECOMMENDATIONS:
-- 1-5 bottles/week: Single bottles or 10+1 coupon book
-- 5-15 bottles/week: 100+40 coupon book
-- Office use (10+ people): Premium package or bulk coupons
-- First-time customers: Trial bottle
-- Need equipment: Table dispenser, hand pump, or premium cooler
+5. Handle objections with value propositions
+6. Ask qualifying questions (usage, location, current supplier)
+7. Be conversational and natural
+8. Show clear pricing and benefits
+9. End with call to action
 
 Current conversation: ${JSON.stringify(conversationHistory)}`;
 
@@ -333,7 +313,6 @@ Current conversation: ${JSON.stringify(conversationHistory)}`;
 
 // Extract sales intelligence and update session
 function extractSalesIntelligence(gptResponse, session) {
-    // Update sales stage based on response content
     if (gptResponse.includes('order') || gptResponse.includes('place an order')) {
         session.salesStage = 'decision';
     } else if (gptResponse.includes('recommend') || gptResponse.includes('suggest')) {
@@ -342,7 +321,6 @@ function extractSalesIntelligence(gptResponse, session) {
         session.salesStage = 'interest';
     }
 
-    // Extract product interests
     Object.keys(PRODUCTS).forEach(productKey => {
         const product = PRODUCTS[productKey];
         if (gptResponse.toLowerCase().includes(product.name.toLowerCase()) || 
@@ -354,7 +332,30 @@ function extractSalesIntelligence(gptResponse, session) {
     });
 }
 
-// Enhanced fallback response system
+// Flexible order intent detection
+function detectOrderingIntent(message) {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Multiple ways customers can express ordering intent
+    const orderingKeywords = [
+        'order', 'buy', 'purchase', 'get', 'want', 'need', 'i would like',
+        'can i get', 'can i have', 'give me', 'send me', 'deliver',
+        'i want to buy', 'i need to order', 'place order', 'get me'
+    ];
+    
+    const productKeywords = [
+        'bottle', 'water', 'coupon', 'dispenser', 'pump', 'cooler',
+        'single', 'trial', 'premium', 'table', 'hand', '10+1', '100+40',
+        '140', 'package', 'gallon'
+    ];
+    
+    const hasOrderIntent = orderingKeywords.some(keyword => lowerMessage.includes(keyword));
+    const hasProductReference = productKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    return hasOrderIntent && hasProductReference;
+}
+
+// Enhanced fallback response system with flexible ordering
 function getFallbackResponse(message, session) {
     const lowerMessage = message.toLowerCase().trim();
     
@@ -364,8 +365,8 @@ function getFallbackResponse(message, session) {
         return WELCOME_MENU;
     }
     
-    // Order intent detection
-    if (lowerMessage.includes('order') || lowerMessage.includes('buy') || lowerMessage.includes('purchase')) {
+    // Order intent detection with flexible language
+    if (lowerMessage.includes('order') || lowerMessage.includes('buy') || lowerMessage.includes('purchase') || lowerMessage.includes('want') || lowerMessage.includes('need') || lowerMessage.includes('get')) {
         return `I'd be happy to help you place an order!
 
 Our available products:
@@ -376,12 +377,13 @@ Our available products:
 • Hand Pump - AED 15
 • Table Dispenser - AED 25
 
-To place an order, please type:
-"order [product name]"
+Just tell me what you'd like! You can say:
+• "I want single bottle"
+• "Give me coupon book"
+• "I need premium cooler"
+• Or any way that feels natural to you
 
-Example: "order single bottle" or "order coupon book"
-
-What would you like to order?`;
+What would you like to get?`;
     }
     
     // Pricing questions
@@ -404,7 +406,7 @@ EQUIPMENT:
 PACKAGES:
 • 140 Bottles + Dispenser - AED 920
 
-To order, type: "order [product name]"
+Just let me know what interests you! You can say "I want..." or "I need..." - whatever feels natural.
 
 How many bottles do you use per week? I can recommend the best value option.`;
     }
@@ -426,8 +428,7 @@ DELIVERY CHARGES:
 • FREE with coupon books
 • Standard charges for individual bottles
 
-To place an order for delivery, type:
-"order [product name]"
+Just tell me what you'd like to order and your location!
 
 Which area are you located in?`;
     }
@@ -449,7 +450,7 @@ PAYMENT BENEFITS:
 • Just exchange coupons for bottles
 • Better prices with advance payment
 
-Ready to place an order? Type: "order [product name]"`;
+Ready to place an order? Just tell me what you need!`;
     }
 
     // Customer support
@@ -463,11 +464,11 @@ I'm here to help you with:
 • Payment assistance
 • Account management
 
-NEED SPECIFIC HELP?
-• Order: "order [product name]"
-• Pricing: "pricing"
-• Delivery: "delivery info"
-• Account: Send your mobile number
+NEED HELP WITH ORDERING?
+Just tell me what you want naturally:
+• "I want single bottle"
+• "Give me coupon book"
+• "I need water delivery"
 
 OTHER CONTACT METHODS:
 • WhatsApp: You're already here!
@@ -522,7 +523,7 @@ Special rates for offices and commercial customers
 FIRST-TIME CUSTOMERS:
 Try our Trial Bottle to experience quality
 
-To take advantage of any offer, type: "order [product name]"
+Just tell me what interests you! Say "I want..." and I'll help you order.
 
 Which offer interests you most?`;
     }
@@ -555,7 +556,7 @@ WHY CHOOSE US:
 • Customer-first approach
 
 Ready to experience our premium service?
-Type: "order [product name]"`;
+Just tell me what you'd like!`;
     }
 
     // Account lookup
@@ -576,7 +577,7 @@ Your information is secure and only used for service delivery.
 NEW CUSTOMER?
 No account yet? No problem! You can place your first order immediately.
 
-Send your mobile number or type "order [product name]" to get started.`;
+Send your mobile number or just tell me what you'd like to order!`;
     }
 
     // Default response with menu
@@ -591,8 +592,10 @@ Type any of these for quick help:
 • "complaint" - Report issues
 • Send mobile number - Check account
 
-Or place an order directly:
-"order [product name]"
+Or just tell me what you want:
+• "I want single bottle"
+• "Give me coupon book"
+• "I need water delivery"
 
 What can I help you with today?`;
 }
@@ -605,12 +608,12 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development',
-        version: '3.2.0-Complete-Menu',
+        version: '3.3.0-Flexible-Orders',
         activeSessions: userSessions.size,
         features: {
             gptIntegration: !!OPENAI_API_KEY,
-            erpIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
-            keepAlive: !!KEEP_ALIVE_URL,
+            erpnextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
+            flexibleOrdering: true,
             welcomeMenu: true
         }
     };
@@ -658,7 +661,7 @@ app.post('/webhook', (req, res) => {
     }
 });
 
-// FIXED: Enhanced message handling with better order detection
+// FLEXIBLE: Enhanced message handling with natural order detection
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
@@ -676,20 +679,20 @@ async function handleIncomingMessage(message, phoneNumberId) {
         
         let response;
         
-        // PRIORITY 1: Handle order commands (fixed regex)
-        if (messageBody.toLowerCase().trim().startsWith('order ')) {
-            console.log('Order command detected');
-            response = await handleOrderCommand(messageBody, session, from);
-        } 
-        // PRIORITY 2: Handle order state confirmations
-        else if (session.state === 'confirming_order') {
+        // PRIORITY 1: Handle order state confirmations
+        if (session.state === 'confirming_order') {
             console.log('Handling order confirmation');
             response = await handleOrderConfirmation(messageBody, session, from);
         } 
-        // PRIORITY 3: Handle address collection
+        // PRIORITY 2: Handle address collection
         else if (session.state === 'collecting_address') {
             console.log('Collecting address');
             response = await handleAddressCollection(messageBody, session, from);
+        }
+        // PRIORITY 3: Flexible order detection (multiple ways to express ordering intent)
+        else if (detectOrderingIntent(messageBody)) {
+            console.log('Ordering intent detected');
+            response = await handleFlexibleOrderCommand(messageBody, session, from);
         } 
         // PRIORITY 4: Check for mobile number lookup
         else if (isMobileNumber(messageBody)) {
@@ -745,35 +748,43 @@ async function buildContextForGPT(session, userPhone) {
     return context;
 }
 
-// FIXED: Enhanced order command handling with better product matching
-async function handleOrderCommand(message, session, userPhone) {
-    const orderText = message.substring(5).toLowerCase().trim(); // Remove "order"
-    console.log(`Processing order for: "${orderText}"`);
+// FLEXIBLE: Enhanced order command handling with natural language processing
+async function handleFlexibleOrderCommand(message, session, userPhone) {
+    const lowerMessage = message.toLowerCase().trim();
+    console.log(`Processing flexible order for: "${message}"`);
     
-    // Find matching product with improved logic
+    // Find matching product with flexible matching
     let selectedProduct = null;
     let productKey = null;
     
-    // Try exact matches first
+    // Try to match products based on natural language
     for (const [key, product] of Object.entries(PRODUCTS)) {
         const productName = product.name.toLowerCase();
         const keyWords = product.keywords.map(k => k.toLowerCase());
         
         if (
-            orderText.includes(productName) ||
-            keyWords.some(keyword => orderText.includes(keyword)) ||
-            orderText.includes(key.replace('_', ' ')) ||
-            // Specific matches for common phrases
-            (orderText.includes('single') && key === 'single_bottle') ||
-            (orderText.includes('trial') && key === 'trial_bottle') ||
-            (orderText.includes('dispenser') && !orderText.includes('premium') && key === 'table_dispenser') ||
-            (orderText.includes('pump') && key === 'hand_pump') ||
-            (orderText.includes('cooler') && key === 'premium_cooler') ||
-            (orderText.includes('10') && orderText.includes('1') && key === 'coupon_10_1') ||
-            (orderText.includes('100') && orderText.includes('40') && key === 'coupon_100_40') ||
-            (orderText.includes('140') && key === 'coupon_100_40') ||
-            (orderText.includes('package') && key === 'premium_package') ||
-            (orderText.includes('coupon') && !orderText.includes('10') && !orderText.includes('100') && key === 'coupon_10_1')
+            // Direct product name mentions
+            lowerMessage.includes(productName) ||
+            keyWords.some(keyword => lowerMessage.includes(keyword)) ||
+            
+            // Flexible matching patterns
+            (lowerMessage.includes('single') && lowerMessage.includes('bottle') && key === 'single_bottle') ||
+            (lowerMessage.includes('trial') && key === 'trial_bottle') ||
+            ((lowerMessage.includes('dispenser') || lowerMessage.includes('stand')) && !lowerMessage.includes('premium') && key === 'table_dispenser') ||
+            (lowerMessage.includes('pump') && key === 'hand_pump') ||
+            ((lowerMessage.includes('cooler') || lowerMessage.includes('hot') || lowerMessage.includes('cold')) && key === 'premium_cooler') ||
+            
+            // Coupon book flexible matching
+            ((lowerMessage.includes('10') && lowerMessage.includes('1')) || 
+             (lowerMessage.includes('eleven') || lowerMessage.includes('11')) && key === 'coupon_10_1') ||
+            ((lowerMessage.includes('100') && lowerMessage.includes('40')) || 
+             lowerMessage.includes('140') || lowerMessage.includes('bulk') && key === 'coupon_100_40') ||
+            
+            // Package matching
+            (lowerMessage.includes('package') || lowerMessage.includes('combo') && key === 'premium_package') ||
+            
+            // Generic coupon reference
+            (lowerMessage.includes('coupon') && !lowerMessage.includes('10') && !lowerMessage.includes('100') && key === 'coupon_10_1')
         ) {
             selectedProduct = product;
             productKey = key;
@@ -783,26 +794,28 @@ async function handleOrderCommand(message, session, userPhone) {
     }
     
     if (!selectedProduct) {
-        console.log('No product match found');
-        return `I couldn't find that product. Available products:
+        console.log('No specific product match found, showing options');
+        return `I'd be happy to help you with an order! I understand you're interested in our products.
+
+Here are our available options:
 
 WATER BOTTLES:
-• order single bottle
-• order trial bottle
+• Single Bottle - AED 7 + AED 15 deposit
+• Trial Bottle - AED 7 + AED 15 deposit
 
-COUPON BOOKS:
-• order 10+1 coupon book
-• order 100+40 coupon book
+COUPON BOOKS (Better Value):
+• 10+1 Coupon Book - AED 70 (11 bottles)
+• 100+40 Coupon Book - AED 700 (140 bottles)
 
 EQUIPMENT:
-• order hand pump
-• order table dispenser
-• order premium cooler
+• Hand Pump - AED 15
+• Table Dispenser - AED 25
+• Premium Cooler - AED 300
 
 PACKAGES:
-• order premium package
+• Premium Package - AED 920 (140 bottles + dispenser)
 
-Please try again with one of these exact phrases.`;
+Which product interests you most? Just tell me what you'd like!`;
     }
     
     // Get customer info if not available
@@ -827,15 +840,15 @@ Please try again with one of these exact phrases.`;
         session.state = 'collecting_address';
         console.log('Collecting address for new customer');
         
-        return `Perfect! I'll process your order for: ${selectedProduct.name}
+        return `Perfect! I'll help you get the ${selectedProduct.name}.
 
 PRODUCT DETAILS:
 • ${selectedProduct.description}
 • Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` + AED ${selectedProduct.deposit} deposit` : ''}
 • Total: AED ${selectedProduct.price + selectedProduct.deposit}
 
-I need your delivery address to proceed:
-Please provide your complete address including:
+To complete your order, I need your delivery address:
+Please provide:
 - Building/villa name or number
 - Street name and area
 - City (Dubai/Sharjah/Ajman)
@@ -863,7 +876,7 @@ async function handleOrderConfirmation(message, session, userPhone) {
 
 Feel free to:
 • Browse our menu: type "menu"
-• Place a different order: type "order [product name]"
+• Tell me what you'd like: "I want..."
 • Ask any questions about our products
 
 How else can I help you?`;
@@ -908,7 +921,7 @@ Payment: Cash/Card on delivery
 Please reply "YES" to confirm your order or "NO" to cancel.`;
 }
 
-// FIXED: Complete order processing with ERPNext integration
+// COMPLETE ORDER PROCESSING WITH ERPNEXT INTEGRATION
 async function processOrder(session, userPhone) {
     try {
         console.log('Processing order...');
@@ -916,7 +929,7 @@ async function processOrder(session, userPhone) {
         
         if (!orderInfo) {
             console.log('No order in progress');
-            return 'No order found. Please start a new order by typing "order [product name]"';
+            return 'No order found. Please tell me what you\'d like to order!';
         }
         
         // Ensure customer exists in ERPNext
@@ -985,7 +998,6 @@ async function ensureCustomerExists(orderInfo) {
     try {
         console.log('Checking if customer exists...');
         
-        // Search for existing customer by mobile
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
         
         const searchResponse = await axios.get(searchUrl, {
@@ -1270,7 +1282,7 @@ Mobile: ${customer.mobile_no}
 
 ${addressInfo}
 
-To place an order, type: "order [product name]"`;
+Just tell me what you'd like to order!`;
             
             return responseText;
             
@@ -1281,9 +1293,9 @@ To place an order, type: "order [product name]"`;
 No customer found with mobile: ${mobileNumber}
 
 Ready to place your first order?
-Type "order [product name]" to get started!
+Just tell me what you'd like!
 
-Example: "order single bottle"`;
+Example: "I want single bottle"`;
         }
         
     } catch (error) {
@@ -1358,23 +1370,36 @@ async function sendMessage(to, message, phoneNumberId) {
 }
 
 // Test endpoints
-app.get('/test-gpt', async (req, res) => {
+app.get('/test-flexible-order', async (req, res) => {
     try {
-        const testMessage = "hi";
-        const testSession = createUserSession();
+        const testMessages = [
+            "I want single bottle",
+            "Give me coupon book",
+            "I need premium cooler",
+            "Can I get water delivery"
+        ];
         
-        const response = await getGPTResponse(testMessage, testSession);
+        const results = [];
+        
+        for (const testMessage of testMessages) {
+            const testSession = createUserSession();
+            const isOrderIntent = detectOrderingIntent(testMessage);
+            results.push({
+                message: testMessage,
+                isOrderIntent: isOrderIntent,
+                response: isOrderIntent ? 'Order detected' : 'No order intent'
+            });
+        }
         
         res.json({
             status: 'success',
-            message: 'GPT integration working!',
-            testMessage: testMessage,
-            response: response
+            message: 'Flexible ordering test completed',
+            results: results
         });
     } catch (error) {
         res.status(500).json({
             status: 'error',
-            message: 'GPT integration failed',
+            message: 'Flexible ordering test failed',
             error: error.message
         });
     }
@@ -1428,36 +1453,6 @@ app.get('/analytics', (req, res) => {
     res.json(analytics);
 });
 
-// Test order endpoint
-app.post('/test-order', async (req, res) => {
-    try {
-        const { phone = '+971501234567', product = 'single_bottle', address = 'Test Address, Dubai' } = req.body;
-        
-        const testSession = createUserSession();
-        testSession.orderInProgress = {
-            product: PRODUCTS[product],
-            productKey: product,
-            quantity: 1,
-            customerPhone: phone,
-            address: address
-        };
-        
-        const result = await processOrder(testSession, phone);
-        
-        res.json({
-            status: 'success',
-            message: 'Test order processed',
-            result: result
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'error',
-            message: 'Test order failed',
-            error: error.message
-        });
-    }
-});
-
 // Session cleanup
 setInterval(() => {
     const now = Date.now();
@@ -1477,70 +1472,71 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Complete WhatsApp Water Delivery Bot</title>
+        <title>Flexible WhatsApp Water Delivery Bot</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-            .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
             .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
             .endpoint { margin: 10px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #007bff; }
             .active { color: #28a745; font-weight: bold; }
             .inactive { color: #ffc107; }
-            .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
-            .stat-box { padding: 20px; background: #007bff; color: white; border-radius: 8px; text-align: center; }
+            .feature { background: #e3f2fd; padding: 15px; margin: 10px 0; border-radius: 6px; }
             h1 { color: #333; text-align: center; }
             h2 { color: #007bff; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Complete WhatsApp Water Delivery Bot v3.2</h1>
+            <h1>Flexible WhatsApp Water Delivery Bot v3.3</h1>
             <div class="status">
-                <h2>Status: <span class="active">COMPLETE MENU SYSTEM</span></h2>
-                <p><strong>Version:</strong> 3.2.0 (Complete Welcome Menu + All Services)</p>
+                <h2>Status: <span class="active">FLEXIBLE ORDERING + ERPNEXT</span></h2>
+                <p><strong>Version:</strong> 3.3.0 (Natural Language + ERPNext Integration)</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>GPT Integration:</strong> <span class="${OPENAI_API_KEY ? 'active' : 'inactive'}">${OPENAI_API_KEY ? 'ENABLED' : 'DISABLED'}</span></p>
                 <p><strong>ERPNext:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
             
-            <h3>COMPLETE WELCOME MENU SYSTEM:</h3>
-            <ul>
-                <li>? Order placement with all products</li>
-                <li>? Complete pricing information</li>
-                <li>? Delivery details and scheduling</li>
-                <li>? Payment methods and options</li>
-                <li>? Customer support system</li>
-                <li>? Complaint handling process</li>
-                <li>? Account lookup by mobile</li>
-                <li>? Special offers and deals</li>
-                <li>? Company information</li>
-            </ul>
+            <div class="feature">
+                <h3>? FLEXIBLE ORDER PROCESSING:</h3>
+                <p>Customers can order naturally without rigid formats:</p>
+                <ul>
+                    <li>"I want single bottle" ?</li>
+                    <li>"Give me coupon book" ?</li>
+                    <li>"I need premium cooler" ?</li>
+                    <li>"Can I get water delivery" ?</li>
+                    <li>"Send me hand pump" ?</li>
+                </ul>
+            </div>
 
-            <h3>GREETING RESPONSES:</h3>
-            <div class="endpoint">hi / hello / hey ? Shows complete welcome menu</div>
+            <div class="feature">
+                <h3>? COMPLETE ERPNEXT INTEGRATION:</h3>
+                <ul>
+                    <li>Automatic customer creation</li>
+                    <li>Sales order generation</li>
+                    <li>Address management</li>
+                    <li>Order tracking</li>
+                    <li>Error handling</li>
+                </ul>
+            </div>
+
+            <h3>NATURAL ORDERING EXAMPLES:</h3>
+            <div class="endpoint">"I want single bottle"</div>
+            <div class="endpoint">"Give me coupon book"</div>
+            <div class="endpoint">"I need premium cooler"</div>
+            <div class="endpoint">"Can I get water delivery"</div>
+            <div class="endpoint">"Send me 10+1 package"</div>
+            <div class="endpoint">"I'd like to buy hand pump"</div>
             
             <h3>SERVICE COMMANDS:</h3>
-            <div class="endpoint">pricing / menu ? Complete price list</div>
-            <div class="endpoint">delivery ? Delivery information</div>
-            <div class="endpoint">payment ? Payment methods</div>
-            <div class="endpoint">support ? Customer support</div>
-            <div class="endpoint">complaint ? Complaint handling</div>
-            <div class="endpoint">offers ? Special deals</div>
-            <div class="endpoint">about us ? Company info</div>
-
-            <h3>ORDER COMMANDS:</h3>
-            <div class="endpoint">order single bottle</div>
-            <div class="endpoint">order trial bottle</div>
-            <div class="endpoint">order 10+1 coupon book</div>
-            <div class="endpoint">order 100+40 coupon book</div>
-            <div class="endpoint">order hand pump</div>
-            <div class="endpoint">order table dispenser</div>
-            <div class="endpoint">order premium cooler</div>
-            <div class="endpoint">order premium package</div>
+            <div class="endpoint">hi / hello ? Complete welcome menu</div>
+            <div class="endpoint">pricing ? Full price list</div>
+            <div class="endpoint">delivery ? Delivery info</div>
+            <div class="endpoint">support ? Customer service</div>
+            <div class="endpoint">complaint ? Issue reporting</div>
             
             <h3>TEST ENDPOINTS:</h3>
-            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT welcome menu</div>
+            <div class="endpoint"><strong>/test-flexible-order</strong> - Test natural language ordering</div>
             <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
-            <div class="endpoint"><strong>/test-order</strong> - Test order processing (POST)</div>
             <div class="endpoint"><strong>/analytics</strong> - View session analytics</div>
         </div>
     </body>
@@ -1550,8 +1546,8 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? COMPLETE WhatsApp Water Delivery Bot v3.2 running on port ${PORT}`);
-    console.log('? Complete welcome menu system + All services + Order processing');
+    console.log(`?? FLEXIBLE WhatsApp Water Delivery Bot v3.3 running on port ${PORT}`);
+    console.log('? Natural language ordering + Complete ERPNext integration');
     console.log(`?? URL: http://localhost:${PORT}`);
     
     if (!OPENAI_API_KEY) {
