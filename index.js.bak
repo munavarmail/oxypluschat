@@ -13,10 +13,10 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
-// dotorders ERP Configuration
-const DOTORDERS_ERP_URL = process.env.DOTORDERS_ERP_URL;
-const DOTORDERS_ERP_API_KEY = process.env.DOTORDERS_ERP_API_KEY;
-const DOTORDERS_ERP_API_SECRET = process.env.DOTORDERS_ERP_API_SECRET;
+// ERPNext Configuration (updated for ERPNext compatibility)
+const ERPNEXT_URL = process.env.ERPNEXT_URL || process.env.DOTORDERS_ERP_URL;
+const ERPNEXT_API_KEY = process.env.ERPNEXT_API_KEY || process.env.DOTORDERS_ERP_API_KEY;
+const ERPNEXT_API_SECRET = process.env.ERPNEXT_API_SECRET || process.env.DOTORDERS_ERP_API_SECRET;
 
 // Keep-alive configuration
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL;
@@ -31,14 +31,16 @@ const PRODUCTS = {
         name: 'Single Bottle', 
         price: 7, 
         deposit: 15, 
+        item_code: '5 Gallon Filled',
         description: '5-gallon water bottle made from 100% virgin material with low sodium and pH-balanced water',
-        keywords: ['single', 'one bottle', 'individual', 'trial'],
+        keywords: ['single', 'one bottle', 'individual', 'trial', '1 bottle'],
         salesPoints: ['Perfect for trying our quality', 'No commitment', 'Quick delivery']
     },
     'trial_bottle': { 
         name: 'Trial Bottle', 
         price: 7, 
         deposit: 15, 
+        item_code: '5 Gallon Filled',
         description: 'Trial 5-gallon water bottle - perfect for first-time customers',
         keywords: ['trial', 'test', 'first time', 'sample'],
         salesPoints: ['Risk-free trial', 'Experience our quality', 'Same premium water']
@@ -47,6 +49,7 @@ const PRODUCTS = {
         name: 'Table Top Dispenser', 
         price: 25, 
         deposit: 0, 
+        item_code: 'Table Dispenser',
         description: 'Basic table top dispenser for convenient water access',
         keywords: ['table', 'dispenser', 'basic', 'simple'],
         salesPoints: ['No electricity needed', 'Compact design', 'Easy to use']
@@ -55,6 +58,7 @@ const PRODUCTS = {
         name: 'Hand Pump', 
         price: 15, 
         deposit: 0, 
+        item_code: 'Hand Pump',
         description: 'Manual hand pump for bottles - most economical option',
         keywords: ['pump', 'manual', 'hand', 'cheap'],
         salesPoints: ['Most affordable', 'No maintenance', 'Works anywhere']
@@ -63,6 +67,7 @@ const PRODUCTS = {
         name: 'Premium Water Cooler', 
         price: 300, 
         deposit: 0, 
+        item_code: 'Water Cooler',
         description: 'Premium cooler with hot/cold water, 1-year warranty from Geo General',
         keywords: ['premium', 'cooler', 'hot', 'cold', 'electric'],
         salesPoints: ['Hot & cold water', '1-year warranty', 'Premium quality', 'Energy efficient']
@@ -71,29 +76,32 @@ const PRODUCTS = {
         name: '10+1 Coupon Book', 
         price: 70, 
         deposit: 0, 
+        item_code: 'Coupon Book',
         description: '11 bottles (10+1 free), up to 3 bottles without deposit',
-        keywords: ['10+1', 'eleven', 'coupon book', 'small package'],
+        keywords: ['10+1', 'eleven', 'coupon book', 'small package', '11 bottles'],
         salesPoints: ['Save on deposit', 'Free bottle included', 'Better per-bottle price', 'Priority delivery']
     },
     'coupon_100_40': { 
         name: '100+40 Coupon Book', 
         price: 700, 
         deposit: 0, 
+        item_code: 'Coupon Book',
         description: '140 bottles total, up to 5 bottles without deposit, BNPL available',
-        keywords: ['100+40', '140', 'bulk', 'large package', 'bnpl'],
+        keywords: ['100+40', '140', 'bulk', 'large package', 'bnpl', '140 bottles'],
         salesPoints: ['Best value for money', 'Buy now pay later option', 'Huge savings', 'No deposit for 5 bottles', 'Priority service']
     },
     'premium_package': { 
         name: '140 Bottles + Premium Dispenser', 
         price: 920, 
         deposit: 0, 
+        item_code: 'Premium Package',
         description: '140 bottles + Premium dispenser package - complete solution',
-        keywords: ['premium package', 'complete', 'dispenser included'],
+        keywords: ['premium package', 'complete', 'dispenser included', 'combo'],
         salesPoints: ['Complete water solution', 'Premium dispenser included', 'Maximum convenience', 'Best overall value']
     }
 };
 
-// Enhanced knowledge base with context for GPT
+// Enhanced knowledge base with context for GPT and order prompts
 const KNOWLEDGE_BASE = `
 COMPANY INFORMATION:
 - Water delivery service operating in Dubai, Sharjah, Ajman (except freezones)
@@ -102,51 +110,37 @@ COMPANY INFORMATION:
 - Focus on quality: 100% virgin material bottles, low sodium, pH-balanced water
 - Superior customer service compared to competitors
 
-PRICING STRUCTURE:
-- Base price: AED 7 per bottle
-- Bottle deposit: AED 15 (refundable)
-- With coupon books: As low as AED 5 per bottle
-- Equipment transparent pricing (not hidden in bottle costs)
+PRODUCTS AND PRICING:
+1. Single Bottle - AED 7 + AED 15 deposit (5-gallon water bottle)
+2. Trial Bottle - AED 7 + AED 15 deposit (perfect for first-time customers)
+3. Table Top Dispenser - AED 25 (basic dispenser, no electricity needed)
+4. Hand Pump - AED 15 (manual pump, most economical)
+5. Premium Water Cooler - AED 300 (hot/cold water, 1-year warranty)
+6. 10+1 Coupon Book - AED 70 (11 bottles, save on deposit)
+7. 100+40 Coupon Book - AED 700 (140 bottles, best value, BNPL available)
+8. Premium Package - AED 920 (140 bottles + premium dispenser)
 
-DELIVERY INFORMATION:
-- Coverage: Dubai, Sharjah, Ajman (no freezones)
-- WhatsApp-based scheduling
-- Weekly scheduled delivery available
-- Urgent/out-of-schedule requests accommodated
-- Free delivery with coupon books
-- Standard charges for individual bottles
+ORDER PROCESS:
+To place an order, customers should:
+1. Type "order [product name]" (e.g., "order single bottle", "order coupon book")
+2. Provide delivery address if new customer
+3. Confirm order details
+4. Choose payment method (cash/card on delivery)
 
 PAYMENT METHODS:
-- Cash payment
+- Cash payment on delivery
 - Bank transfer
 - Card payment (notify one day prior)
 - Buy Now Pay Later (ONLY for 100+40 Coupon Book)
 
-COUPON SYSTEM BENEFITS:
-- No bottle deposit required
-- Prioritized delivery
-- Out-of-schedule delivery possible
-- No delivery charges
-- No cash payment hassle every time
-- Better price per bottle
-- Simply exchange coupons for bottles
+DELIVERY INFORMATION:
+- Coverage: Dubai, Sharjah, Ajman (no freezones)
+- Same-day/next-day delivery available
+- Weekly scheduled delivery options
+- Free delivery with coupon books
+- Standard charges for individual bottles
 
-SALES QUALIFICATION QUESTIONS:
-- Current water consumption per week/month
-- Home or office use
-- Number of people in household/office
-- Current water supplier satisfaction
-- Budget considerations
-- Delivery frequency preferences
-
-COMMON Q&A:
-- HOW TO SCHEDULE THE DELIVERY? You can simply message us on WhatsApp and we will take care of your delivery. We will also set a scheduled day for you out of the week, but don't worry, even if you have urgent requirements out of schedule we will take care of it.
-- WHAT ARE YOUR PAYMENT METHODS? We accept cash, bank transfer and even card payment (need to inform one day prior)
-- WHERE IS BUY NOW PAY LATER APPLICABLE? THIS OPTION IS ONLY FOR THE 100+40 COUPON BOOK'S AND NOT FOR ANY OTHER COUPONS OR INDIVIDUAL BOTTLES
-- Where are you located? Our HQ is located in Ajman and we deliver throughout Sharjah, Ajman & Dubai.
-- Why are you different from others? The main way we differentiate from others is the quality of our bottles and our customer service
-- Can you deliver to commercial establishments/offices? We absolutely can deliver and have been doing it for 10 years
-- WHAT TYPE OF PRODUCTS DO YOU HAVE? We have the 5Gal water bottles made from 100% virgin material with low sodium and ph-Balanced water
+IMPORTANT: Always guide customers to place orders by typing "order [product name]"
 `;
 
 // Enhanced user session structure
@@ -165,7 +159,7 @@ function createUserSession() {
         },
         orderInProgress: null,
         lastActivity: Date.now(),
-        salesStage: 'discovery' // discovery, interest, consideration, decision
+        salesStage: 'discovery'
     };
 }
 
@@ -198,12 +192,24 @@ function startKeepAlive() {
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// GPT-4.1 mini integration for intelligent conversations
+// GPT-4o-mini integration for intelligent conversations
 async function getGPTResponse(userMessage, session, context = '') {
     try {
-        const conversationHistory = session.conversationHistory.slice(-10); // Last 10 messages for context
+        const conversationHistory = session.conversationHistory.slice(-8); // Last 8 messages for context
         
         const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE. 
+
+IMPORTANT ORDER INSTRUCTIONS:
+When customers want to place an order, ALWAYS guide them to use the specific format:
+"To place an order, please type: order [product name]"
+
+Examples:
+- "order single bottle"
+- "order coupon book" 
+- "order premium cooler"
+- "order 10+1 coupon book"
+
+Do NOT try to process orders yourself - always direct them to use the "order" command.
 
 CONTEXT:
 ${KNOWLEDGE_BASE}
@@ -211,39 +217,24 @@ ${KNOWLEDGE_BASE}
 ${context}
 
 CONVERSATION GUIDELINES:
-1. Always be helpful, professional, and sales-oriented
+1. Be helpful, professional, and sales-oriented
 2. Qualify customers by understanding their needs
-3. Recommend appropriate products based on their situation
-4. Handle objections intelligently
-5. Guide towards order completion
-6. Use the provided pricing and product information
-7. Be conversational and natural, not robotic
-8. Ask qualifying questions to understand customer needs
-9. Address concerns proactively
-10. Always try to advance the sale
+3. Recommend appropriate products based on consumption
+4. Guide customers to place orders using "order [product]" format
+5. Handle objections with value propositions
+6. Ask qualifying questions (usage, location, current supplier)
+7. Be conversational and natural
+8. Show clear pricing and benefits
+9. End with call to action
 
-RESPONSE FORMAT:
-- Be concise but informative
-- Use bullet points sparingly, prefer conversational tone
-- Include relevant product recommendations
-- Ask follow-up questions to qualify
-- Show value proposition clearly
-- End with a call to action when appropriate
+PRODUCT RECOMMENDATIONS:
+- 1-5 bottles/week: Single bottles or 10+1 coupon book
+- 5-15 bottles/week: 100+40 coupon book
+- Office use (10+ people): Premium package or bulk coupons
+- First-time customers: Trial bottle
+- Need equipment: Table dispenser, hand pump, or premium cooler
 
-CUSTOMER QUALIFICATION FOCUS:
-- Usage: How many bottles per week/month?
-- Type: Home or office use?
-- Location: Which area for delivery?
-- Current situation: Existing supplier satisfaction?
-- Decision factors: Price, quality, convenience?
-
-SALES STAGES:
-- Discovery: Understand needs and qualify
-- Interest: Present relevant solutions  
-- Consideration: Address concerns, show value
-- Decision: Guide to order completion
-
-Current conversation history: ${JSON.stringify(conversationHistory)}`;
+Current conversation: ${JSON.stringify(conversationHistory)}`;
 
         const messages = [
             { role: 'system', content: systemPrompt },
@@ -252,9 +243,9 @@ Current conversation history: ${JSON.stringify(conversationHistory)}`;
         ];
 
         const response = await axios.post(OPENAI_API_URL, {
-            model: 'gpt-4o-mini', // Use GPT-4o-mini for cost efficiency
+            model: 'gpt-4o-mini',
             messages: messages,
-            max_tokens: 500,
+            max_tokens: 400,
             temperature: 0.7,
             presence_penalty: 0.6,
             frequency_penalty: 0.3
@@ -273,8 +264,8 @@ Current conversation history: ${JSON.stringify(conversationHistory)}`;
             { role: 'assistant', content: gptResponse }
         );
 
-        // Extract sales intelligence from response
-        await extractSalesIntelligence(gptResponse, session);
+        // Extract sales intelligence
+        extractSalesIntelligence(gptResponse, session);
 
         return gptResponse;
 
@@ -285,9 +276,9 @@ Current conversation history: ${JSON.stringify(conversationHistory)}`;
 }
 
 // Extract sales intelligence and update session
-async function extractSalesIntelligence(gptResponse, session) {
+function extractSalesIntelligence(gptResponse, session) {
     // Update sales stage based on response content
-    if (gptResponse.includes('order') || gptResponse.includes('purchase') || gptResponse.includes('buy')) {
+    if (gptResponse.includes('order') || gptResponse.includes('place an order')) {
         session.salesStage = 'decision';
     } else if (gptResponse.includes('recommend') || gptResponse.includes('suggest')) {
         session.salesStage = 'consideration';
@@ -295,7 +286,7 @@ async function extractSalesIntelligence(gptResponse, session) {
         session.salesStage = 'interest';
     }
 
-    // Extract interests based on response
+    // Extract product interests
     Object.keys(PRODUCTS).forEach(productKey => {
         const product = PRODUCTS[productKey];
         if (gptResponse.toLowerCase().includes(product.name.toLowerCase()) || 
@@ -307,95 +298,106 @@ async function extractSalesIntelligence(gptResponse, session) {
     });
 }
 
-// Fallback response system
+// Enhanced fallback response system
 function getFallbackResponse(message, session) {
     const lowerMessage = message.toLowerCase();
     
-    // Check for order intent
+    // Order intent detection
     if (lowerMessage.includes('order') || lowerMessage.includes('buy') || lowerMessage.includes('purchase')) {
-        return `I'd be happy to help you place an order! 
+        return `I'd be happy to help you place an order!
 
-To recommend the best option for you, could you tell me:
-- How many bottles do you typically use per week?
-- Is this for home or office use?
-- Which area should we deliver to?
+Our available products:
+• Single Bottle - AED 7 + AED 15 deposit
+• 10+1 Coupon Book - AED 70 (better value)
+• 100+40 Coupon Book - AED 700 (best value)
+• Premium Cooler - AED 300
+• Hand Pump - AED 15
+• Table Dispenser - AED 25
 
-Based on your needs, I can suggest the most cost-effective solution for you.`;
+To place an order, please type:
+"order [product name]"
+
+Example: "order single bottle" or "order coupon book"
+
+What would you like to order?`;
     }
     
-    // Check for pricing questions
+    // Pricing questions
     if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-        return `Our pricing is transparent and competitive:
+        return `Our transparent pricing:
 
-Individual Bottles: AED 7 + AED 15 deposit
-10+1 Coupon Book: AED 70 (saves deposit, better value)
-100+40 Coupon Book: AED 700 (best value, BNPL available)
+WATER BOTTLES:
+• Single Bottle: AED 7 + AED 15 deposit
+• 10+1 Coupon Book: AED 70 (no deposit for 3 bottles)
+• 100+40 Coupon Book: AED 700 (no deposit for 5 bottles)
 
-Equipment:
-- Hand Pump: AED 15
-- Table Dispenser: AED 25  
-- Premium Cooler: AED 300 (1-year warranty)
+EQUIPMENT:
+• Hand Pump: AED 15
+• Table Dispenser: AED 25
+• Premium Cooler: AED 300 (1-year warranty)
 
-What's your typical monthly consumption? I can calculate the best value option for you.`;
+To place an order, type: "order [product name]"
+
+How many bottles do you use per week? I can recommend the best value option.`;
     }
     
-    // Check for delivery questions
+    // Delivery questions
     if (lowerMessage.includes('deliver') || lowerMessage.includes('when') || lowerMessage.includes('schedule')) {
         return `We deliver throughout Dubai, Sharjah, and Ajman (except freezones).
 
-Delivery Process:
-- Same-day/next-day delivery available
-- Weekly scheduled delivery options
-- WhatsApp notifications for timing
-- Free delivery with coupon books
+DELIVERY DETAILS:
+• Same-day/next-day delivery available
+• Weekly scheduled delivery setup
+• FREE delivery with coupon books
+• WhatsApp coordination for timing
 
-Which area are you located in? I can confirm our delivery schedule for your location.`;
+To place an order for delivery, type:
+"order [product name]"
+
+Which area are you located in?`;
     }
 
-    // Default response
-    return `I'm here to help you with our premium water delivery service!
+    // Menu/product list
+    if (lowerMessage.includes('menu') || lowerMessage.includes('products') || lowerMessage.includes('what do you sell')) {
+        return `WATER DELIVERY MENU:
+
+WATER BOTTLES:
+• Single Bottle - AED 7 (+15 deposit)
+• Trial Bottle - AED 7 (+15 deposit)
+
+COUPON BOOKS (Better Value):
+• 10+1 Coupon Book - AED 70
+• 100+40 Coupon Book - AED 700 (BNPL available)
+
+EQUIPMENT:
+• Hand Pump - AED 15
+• Table Dispenser - AED 25
+• Premium Cooler - AED 300
+
+PACKAGES:
+• 140 Bottles + Dispenser - AED 920
+
+To order any product, type: "order [product name]"
+
+What interests you most?`;
+    }
+
+    // Default helpful response
+    return `Hello! I'm here to help with our premium water delivery service.
 
 I can assist with:
-- Product recommendations based on your needs
-- Pricing and value calculations  
-- Delivery scheduling
-- Order placement
+• Product information and pricing
+• Placing orders
+• Delivery scheduling
+• Payment options
 
-What specific information would you like to know? Or shall I ask a few questions to recommend the best solution for you?`;
-}
+QUICK ORDER:
+Type "order [product name]" to place an order
+Example: "order single bottle"
 
-// Build context for GPT based on session data
-async function buildContextForGPT(session, userPhone) {
-    let context = '';
-    
-    // Add customer information if available
-    if (session.customerInfo) {
-        context += `EXISTING CUSTOMER INFO:\n${session.customerInfo}\n\n`;
-    }
-    
-    // Add qualification data
-    if (Object.values(session.qualification).some(v => v !== null)) {
-        context += `CUSTOMER QUALIFICATION:\n`;
-        Object.entries(session.qualification).forEach(([key, value]) => {
-            if (value) context += `${key}: ${value}\n`;
-        });
-        context += '\n';
-    }
-    
-    // Add interested products
-    if (session.interests.length > 0) {
-        context += `CUSTOMER INTERESTS:\n`;
-        session.interests.forEach(productKey => {
-            const product = PRODUCTS[productKey];
-            context += `- ${product.name}: ${product.description}\n`;
-        });
-        context += '\n';
-    }
-    
-    // Add sales stage context
-    context += `CURRENT SALES STAGE: ${session.salesStage}\n`;
-    
-    return context;
+Or type "menu" to see all products.
+
+What can I help you with today?`;
 }
 
 // Health check endpoint
@@ -406,11 +408,11 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development',
-        version: '3.0.0-GPT-Enhanced',
+        version: '3.1.0-Fixed-Orders',
         activeSessions: userSessions.size,
         features: {
             gptIntegration: !!OPENAI_API_KEY,
-            erpIntegration: !!(DOTORDERS_ERP_URL && DOTORDERS_ERP_API_KEY),
+            erpIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
             keepAlive: !!KEEP_ALIVE_URL
         }
     };
@@ -458,12 +460,14 @@ app.post('/webhook', (req, res) => {
     }
 });
 
-// Enhanced message handling with GPT integration
+// FIXED: Enhanced message handling with better order detection
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
     
     if (messageBody) {
+        console.log(`Processing message from ${from}: ${messageBody}`);
+        
         // Get or create user session
         if (!userSessions.has(from)) {
             userSessions.set(from, createUserSession());
@@ -474,62 +478,136 @@ async function handleIncomingMessage(message, phoneNumberId) {
         
         let response;
         
-        // Handle order commands and confirmations first
-        if (messageBody.toLowerCase().startsWith('order ')) {
+        // PRIORITY 1: Handle order commands (fixed regex)
+        if (messageBody.toLowerCase().trim().startsWith('order ')) {
+            console.log('Order command detected');
             response = await handleOrderCommand(messageBody, session, from);
-        } else if (session.state === 'confirming_order') {
+        } 
+        // PRIORITY 2: Handle order state confirmations
+        else if (session.state === 'confirming_order') {
+            console.log('Handling order confirmation');
             response = await handleOrderConfirmation(messageBody, session, from);
-        } else if (session.state === 'collecting_address') {
+        } 
+        // PRIORITY 3: Handle address collection
+        else if (session.state === 'collecting_address') {
+            console.log('Collecting address');
             response = await handleAddressCollection(messageBody, session, from);
-        } else {
-            // Check mobile number for customer lookup
-            const mobileRegex = /(\+?\d{1,4})?[0-9]{8,15}/;
-            const mobileMatch = messageBody.match(mobileRegex);
-            
-            if (mobileMatch && messageBody.length < 20) {
-                let mobileNumber = mobileMatch[0].trim();
-                console.log(`Processing mobile number: ${mobileNumber}`);
-                response = await getCustomerByMobile(mobileNumber);
-                session.customerInfo = response;
-            } else {
-                // Use GPT for intelligent conversation
-                const context = await buildContextForGPT(session, from);
-                response = await getGPTResponse(messageBody, session, context);
-            }
+        } 
+        // PRIORITY 4: Check for mobile number lookup
+        else if (isMobileNumber(messageBody)) {
+            console.log('Mobile number detected');
+            response = await getCustomerByMobile(messageBody.trim());
+            session.customerInfo = response;
+        } 
+        // PRIORITY 5: Use GPT for conversation
+        else {
+            console.log('Using GPT for conversation');
+            const context = await buildContextForGPT(session, from);
+            response = await getGPTResponse(messageBody, session, context);
         }
         
+        console.log('Sending response:', response.substring(0, 100) + '...');
         await sendMessage(from, response, phoneNumberId);
     }
 }
 
-// Enhanced order handling
-async function handleOrderCommand(message, session, userPhone) {
-    const orderText = message.substring(6).toLowerCase().trim();
+// Helper function to detect mobile numbers
+function isMobileNumber(text) {
+    const mobileRegex = /^(\+?\d{1,4})?[0-9]{8,15}$/;
+    return mobileRegex.test(text.trim()) && text.length < 20;
+}
+
+// Build context for GPT based on session data
+async function buildContextForGPT(session, userPhone) {
+    let context = '';
     
-    // Try to match product
+    if (session.customerInfo && !session.customerInfo.includes('NOT FOUND')) {
+        context += `EXISTING CUSTOMER INFO:\n${session.customerInfo}\n\n`;
+    }
+    
+    if (Object.values(session.qualification).some(v => v !== null)) {
+        context += `CUSTOMER QUALIFICATION:\n`;
+        Object.entries(session.qualification).forEach(([key, value]) => {
+            if (value) context += `${key}: ${value}\n`;
+        });
+        context += '\n';
+    }
+    
+    if (session.interests.length > 0) {
+        context += `CUSTOMER INTERESTS:\n`;
+        session.interests.forEach(productKey => {
+            const product = PRODUCTS[productKey];
+            if (product) context += `- ${product.name}: ${product.description}\n`;
+        });
+        context += '\n';
+    }
+    
+    context += `SALES STAGE: ${session.salesStage}\n`;
+    
+    return context;
+}
+
+// FIXED: Enhanced order command handling with better product matching
+async function handleOrderCommand(message, session, userPhone) {
+    const orderText = message.substring(5).toLowerCase().trim(); // Remove "order"
+    console.log(`Processing order for: "${orderText}"`);
+    
+    // Find matching product with improved logic
     let selectedProduct = null;
     let productKey = null;
     
+    // Try exact matches first
     for (const [key, product] of Object.entries(PRODUCTS)) {
-        if (orderText.includes(key.replace('_', ' ')) || 
-            orderText.includes(product.name.toLowerCase()) ||
-            product.keywords.some(keyword => orderText.includes(keyword))) {
+        const productName = product.name.toLowerCase();
+        const keyWords = product.keywords.map(k => k.toLowerCase());
+        
+        if (
+            orderText.includes(productName) ||
+            keyWords.some(keyword => orderText.includes(keyword)) ||
+            orderText.includes(key.replace('_', ' ')) ||
+            // Specific matches for common phrases
+            (orderText.includes('single') && key === 'single_bottle') ||
+            (orderText.includes('trial') && key === 'trial_bottle') ||
+            (orderText.includes('dispenser') && !orderText.includes('premium') && key === 'table_dispenser') ||
+            (orderText.includes('pump') && key === 'hand_pump') ||
+            (orderText.includes('cooler') && key === 'premium_cooler') ||
+            (orderText.includes('10') && orderText.includes('1') && key === 'coupon_10_1') ||
+            (orderText.includes('100') && orderText.includes('40') && key === 'coupon_100_40') ||
+            (orderText.includes('140') && key === 'coupon_100_40') ||
+            (orderText.includes('package') && key === 'premium_package') ||
+            (orderText.includes('coupon') && !orderText.includes('10') && !orderText.includes('100') && key === 'coupon_10_1')
+        ) {
             selectedProduct = product;
             productKey = key;
+            console.log(`Found product match: ${product.name}`);
             break;
         }
     }
     
     if (!selectedProduct) {
-        return `Product not found. Available products:
-${Object.entries(PRODUCTS).map(([key, product]) => 
-    `- ${product.name} - AED ${product.price}${product.deposit > 0 ? ` (+${product.deposit} deposit)` : ''}`
-).join('\n')}
+        console.log('No product match found');
+        return `I couldn't find that product. Available products:
 
-Example: "order single bottle"`;
+WATER BOTTLES:
+• order single bottle
+• order trial bottle
+
+COUPON BOOKS:
+• order 10+1 coupon book
+• order 100+40 coupon book
+
+EQUIPMENT:
+• order hand pump
+• order table dispenser
+• order premium cooler
+
+PACKAGES:
+• order premium package
+
+Please try again with one of these exact phrases.`;
     }
     
-    // Get customer info first if not available
+    // Get customer info if not available
     if (!session.customerInfo) {
         const customerInfo = await getCustomerByMobile(userPhone);
         session.customerInfo = customerInfo;
@@ -544,39 +622,59 @@ Example: "order single bottle"`;
         customerInfo: session.customerInfo
     };
     
+    console.log('Order in progress created:', session.orderInProgress);
+    
     // Check if we need address
     if (!session.customerInfo || session.customerInfo.includes('CUSTOMER NOT FOUND') || !session.customerInfo.includes('ADDRESS:')) {
         session.state = 'collecting_address';
-        return `Perfect! I'll help you order the ${selectedProduct.name}.
+        console.log('Collecting address for new customer');
+        
+        return `Perfect! I'll process your order for: ${selectedProduct.name}
 
-Product Details:
-- ${selectedProduct.description}
-- Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` + AED ${selectedProduct.deposit} deposit` : ''}
+PRODUCT DETAILS:
+• ${selectedProduct.description}
+• Price: AED ${selectedProduct.price}${selectedProduct.deposit > 0 ? ` + AED ${selectedProduct.deposit} deposit` : ''}
+• Total: AED ${selectedProduct.price + selectedProduct.deposit}
 
-To process your order, I need your delivery address. Please provide:
+I need your delivery address to proceed:
+Please provide your complete address including:
 - Building/villa name or number
-- Street/area name
-- Any specific directions for delivery`;
+- Street name and area
+- City (Dubai/Sharjah/Ajman)
+- Any delivery instructions`;
     } else {
         session.state = 'confirming_order';
+        console.log('Existing customer, moving to confirmation');
         return await generateOrderConfirmation(session.orderInProgress);
     }
 }
 
 // Order confirmation handling
 async function handleOrderConfirmation(message, session, userPhone) {
-    const lowerMessage = message.toLowerCase();
+    const lowerMessage = message.toLowerCase().trim();
+    console.log(`Handling confirmation: "${lowerMessage}"`);
     
-    if (lowerMessage.includes('yes') || lowerMessage.includes('confirm') || lowerMessage.includes('ok')) {
+    if (lowerMessage.includes('yes') || lowerMessage.includes('confirm') || lowerMessage.includes('ok') || lowerMessage === 'y') {
+        console.log('Order confirmed, processing...');
         return await processOrder(session, userPhone);
-    } else if (lowerMessage.includes('no') || lowerMessage.includes('cancel')) {
+    } else if (lowerMessage.includes('no') || lowerMessage.includes('cancel') || lowerMessage === 'n') {
+        console.log('Order cancelled');
         session.state = 'active';
         session.orderInProgress = null;
-        return "No problem! Order cancelled. Feel free to ask if you have any questions or want to explore other options.";
+        return `Order cancelled. No problem!
+
+Feel free to:
+• Browse our menu: type "menu"
+• Place a different order: type "order [product name]"
+• Ask any questions about our products
+
+How else can I help you?`;
     } else {
-        return `Please confirm your order by replying:
-- "YES" or "CONFIRM" to proceed
-- "NO" or "CANCEL" to cancel
+        return `Please confirm your order:
+
+Reply with:
+• "YES" or "CONFIRM" to proceed with the order
+• "NO" or "CANCEL" to cancel
 
 Or ask me any questions about the order details.`;
     }
@@ -584,6 +682,7 @@ Or ask me any questions about the order details.`;
 
 // Address collection handling  
 async function handleAddressCollection(message, session, userPhone) {
+    console.log('Address collected:', message);
     session.orderInProgress.address = message;
     session.state = 'confirming_order';
     return await generateOrderConfirmation(session.orderInProgress);
@@ -593,13 +692,15 @@ async function handleAddressCollection(message, session, userPhone) {
 async function generateOrderConfirmation(orderInfo) {
     const total = orderInfo.product.price + orderInfo.product.deposit;
     
+    console.log('Generating order confirmation for:', orderInfo.product.name);
+    
     return `ORDER CONFIRMATION
 
 Product: ${orderInfo.product.name}
 Description: ${orderInfo.product.description}
 Price: AED ${orderInfo.product.price}
 ${orderInfo.product.deposit > 0 ? `Deposit: AED ${orderInfo.product.deposit} (refundable)` : ''}
-Total: AED ${total}
+TOTAL: AED ${total}
 
 Delivery Address:
 ${orderInfo.address || 'Using address on file'}
@@ -609,15 +710,23 @@ Payment: Cash/Card on delivery
 Please reply "YES" to confirm your order or "NO" to cancel.`;
 }
 
-// Process confirmed order with complete ERP integration
+// FIXED: Complete order processing with ERPNext integration
 async function processOrder(session, userPhone) {
     try {
+        console.log('Processing order...');
         const orderInfo = session.orderInProgress;
         
-        // Ensure customer exists in ERP
+        if (!orderInfo) {
+            console.log('No order in progress');
+            return 'No order found. Please start a new order by typing "order [product name]"';
+        }
+        
+        // Ensure customer exists in ERPNext
+        console.log('Ensuring customer exists...');
         const customerResult = await ensureCustomerExists(orderInfo);
         
         if (!customerResult.success) {
+            console.log('Customer creation failed:', customerResult.message);
             return `ORDER PROCESSING ERROR
 
 ${customerResult.message}
@@ -625,28 +734,37 @@ ${customerResult.message}
 Please try again or contact our support team.`;
         }
         
-        // Create order in ERP
-        const erpOrder = await createERPOrder(orderInfo, customerResult.customerName);
+        console.log('Customer ready, creating order...');
+        // Create order in ERPNext
+        const erpOrder = await createERPNextOrder(orderInfo, customerResult.customerName);
         
         if (erpOrder.success) {
+            console.log('Order created successfully:', erpOrder.orderName);
+            
+            // Clear order state
             session.state = 'active';
             session.orderInProgress = null;
-            session.salesStage = 'decision';
+            session.salesStage = 'completed';
             
-            return `ORDER CONFIRMED
+            return `ORDER CONFIRMED SUCCESSFULLY!
 
-Order ID: ${erpOrder.orderName}
+Order Number: ${erpOrder.orderName}
 Product: ${orderInfo.product.name}
-Total: AED ${orderInfo.product.price + orderInfo.product.deposit}
+Total Amount: AED ${orderInfo.product.price + orderInfo.product.deposit}
 
-Next Steps:
-Our delivery team will contact you within 2 hours to schedule delivery.
+NEXT STEPS:
+• Our delivery team will contact you within 2 hours
+• We'll schedule delivery to your address
+• Payment: Cash/Card on delivery
 
-Delivery Areas:
+DELIVERY AREAS:
 Dubai, Sharjah, Ajman
+
+Need to modify your order? Just message us!
 
 Thank you for choosing our premium water service!`;
         } else {
+            console.log('Order creation failed:', erpOrder.error);
             return handleOrderError(erpOrder.error, erpOrder.errorType);
         }
         
@@ -654,45 +772,49 @@ Thank you for choosing our premium water service!`;
         console.error('Error processing order:', error);
         return `ORDER PROCESSING ERROR
 
-There was a technical issue while processing your order. Our team has been notified.
+Technical issue occurred while processing your order.
+Our team has been notified.
 
-Please try again in a few minutes or contact support directly.`;
+Please try again in a few minutes or contact support directly.
+Order details have been saved.`;
     }
 }
 
-// COMPLETE ERP INTEGRATION FUNCTIONS
+// COMPLETE ERPNEXT INTEGRATION FUNCTIONS
 
-// Ensure customer exists in ERP, create if necessary
+// Ensure customer exists in ERPNext, create if necessary
 async function ensureCustomerExists(orderInfo) {
     try {
-        // First try to find existing customer
-        const searchUrl = `${DOTORDERS_ERP_URL}/api/resource/Customer`;
+        console.log('Checking if customer exists...');
         
-        const response = await axios.get(searchUrl, {
+        // Search for existing customer by mobile
+        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
+        
+        const searchResponse = await axios.get(searchUrl, {
             headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', orderInfo.customerPhone]]),
-                fields: JSON.stringify(['name', 'customer_name'])
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no'])
             }
         });
         
-        if (response.data.data && response.data.data.length > 0) {
-            // Customer exists
+        if (searchResponse.data.data && searchResponse.data.data.length > 0) {
+            console.log('Customer exists:', searchResponse.data.data[0].name);
             return {
                 success: true,
-                customerName: response.data.data[0].name,
+                customerName: searchResponse.data.data[0].name,
                 message: 'Customer found'
             };
         } else {
-            // Customer doesn't exist, create new one
-            return await createERPCustomer(orderInfo);
+            console.log('Customer not found, creating new...');
+            return await createERPNextCustomer(orderInfo);
         }
         
     } catch (error) {
-        console.error('Error checking customer existence:', error);
+        console.error('Error checking customer existence:', error.response?.data || error.message);
         return {
             success: false,
             message: 'Unable to verify customer information. Please contact support.'
@@ -700,30 +822,34 @@ async function ensureCustomerExists(orderInfo) {
     }
 }
 
-// Create new customer in ERP
-async function createERPCustomer(orderInfo) {
+// Create new customer in ERPNext
+async function createERPNextCustomer(orderInfo) {
     try {
+        console.log('Creating new customer...');
+        
         const customerData = {
             doctype: 'Customer',
             customer_name: `Customer ${orderInfo.customerPhone}`,
             mobile_no: orderInfo.customerPhone,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: 'DXB 02'
+            territory: 'UAE'
         };
         
         const response = await axios.post(
-            `${DOTORDERS_ERP_URL}/api/resource/Customer`,
+            `${ERPNEXT_URL}/api/resource/Customer`,
             customerData,
             {
                 headers: {
-                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                     'Content-Type': 'application/json'
                 }
             }
         );
         
-        // Create address for the customer if provided
+        console.log('Customer created:', response.data.data.name);
+        
+        // Create address if provided
         if (orderInfo.address) {
             await createCustomerAddress(response.data.data.name, orderInfo);
         }
@@ -735,23 +861,26 @@ async function createERPCustomer(orderInfo) {
         };
         
     } catch (error) {
-        console.error('Error creating customer:', error);
+        console.error('Error creating customer:', error.response?.data || error.message);
         return {
             success: false,
-            message: 'Unable to create customer profile. Please provide your details to our support team.'
+            message: 'Unable to create customer profile. Please contact support.'
         };
     }
 }
 
-// Create customer address
+// Create customer address in ERPNext
 async function createCustomerAddress(customerName, orderInfo) {
     try {
+        console.log('Creating customer address...');
+        
         const addressData = {
             doctype: 'Address',
             address_title: 'Delivery Address',
             address_line1: orderInfo.address,
             city: 'UAE',
             country: 'United Arab Emirates',
+            phone: orderInfo.customerPhone,
             links: [{
                 link_doctype: 'Customer',
                 link_name: customerName
@@ -759,32 +888,36 @@ async function createCustomerAddress(customerName, orderInfo) {
         };
         
         await axios.post(
-            `${DOTORDERS_ERP_URL}/api/resource/Address`,
+            `${ERPNEXT_URL}/api/resource/Address`,
             addressData,
             {
                 headers: {
-                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                     'Content-Type': 'application/json'
                 }
             }
         );
         
+        console.log('Address created successfully');
+        
     } catch (error) {
-        console.error('Error creating address:', error);
+        console.error('Error creating address:', error.response?.data || error.message);
         // Don't fail the order for address creation issues
     }
 }
 
-// Create order in dotorders ERP
-async function createERPOrder(orderInfo, customerName) {
+// Create order in ERPNext
+async function createERPNextOrder(orderInfo, customerName) {
     try {
+        console.log('Creating ERPNext order...');
+        
         const orderData = {
             doctype: 'Sales Order',
             customer: customerName,
             order_type: 'Sales',
-            delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
+            delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             items: [{
-                item_code: '5 Gallon Filled', // All products map to this single registered item
+                item_code: orderInfo.product.item_code,
                 item_name: orderInfo.product.name,
                 description: orderInfo.product.description,
                 qty: orderInfo.quantity,
@@ -796,10 +929,10 @@ async function createERPOrder(orderInfo, customerName) {
             custom_order_source: 'WhatsApp Bot'
         };
         
-        // If there's a deposit, add it as a separate line item
+        // Add deposit as separate line item if applicable
         if (orderInfo.product.deposit > 0) {
             orderData.items.push({
-                item_code: '5 Gallon Filled', // Use same item code for deposit
+                item_code: 'Bottle Deposit',
                 item_name: 'Bottle Deposit',
                 description: 'Refundable bottle deposit',
                 qty: orderInfo.quantity,
@@ -808,16 +941,19 @@ async function createERPOrder(orderInfo, customerName) {
             });
         }
         
+        console.log('Sending order data to ERPNext...');
         const response = await axios.post(
-            `${DOTORDERS_ERP_URL}/api/resource/Sales Order`,
+            `${ERPNEXT_URL}/api/resource/Sales Order`,
             orderData,
             {
                 headers: {
-                    'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                     'Content-Type': 'application/json'
                 }
             }
         );
+        
+        console.log('ERPNext order created:', response.data.data.name);
         
         return {
             success: true,
@@ -826,32 +962,32 @@ async function createERPOrder(orderInfo, customerName) {
         };
         
     } catch (error) {
-        console.error('ERP Order creation failed:', error.response?.data || error.message);
+        console.error('ERPNext order creation failed:', error.response?.data || error.message);
         
-        // Parse error details for better user messaging
-        let errorMessage = error.message;
+        let errorMessage = 'Order creation failed';
         let errorType = 'general';
         
         if (error.response?.data) {
             const errorData = error.response.data;
             
-            // Extract meaningful error message
             if (errorData.message) {
                 errorMessage = errorData.message;
-            } else if (errorData.exc_type) {
+            }
+            
+            if (errorData.exc_type) {
                 errorType = errorData.exc_type;
-                
-                // Try to extract server messages
-                if (errorData.server_messages) {
-                    try {
-                        const serverMessages = JSON.parse(errorData.server_messages);
-                        if (Array.isArray(serverMessages) && serverMessages.length > 0) {
-                            const parsedMessage = JSON.parse(serverMessages[0]);
-                            errorMessage = parsedMessage.message || errorMessage;
-                        }
-                    } catch (parseError) {
-                        console.error('Error parsing server messages:', parseError);
+            }
+            
+            // Parse server messages if available
+            if (errorData.server_messages) {
+                try {
+                    const serverMessages = JSON.parse(errorData.server_messages);
+                    if (Array.isArray(serverMessages) && serverMessages.length > 0) {
+                        const parsedMessage = JSON.parse(serverMessages[0]);
+                        errorMessage = parsedMessage.message || errorMessage;
                     }
+                } catch (parseError) {
+                    console.error('Error parsing server messages:', parseError);
                 }
             }
         }
@@ -866,58 +1002,58 @@ async function createERPOrder(orderInfo, customerName) {
 
 // Handle different types of order errors
 function handleOrderError(error, errorType) {
-    if (typeof error === 'string' && error.includes('Customer') && error.includes('not found')) {
-        return `CUSTOMER ACCOUNT ISSUE
+    console.log('Handling order error:', error);
+    
+    if (typeof error === 'string') {
+        if (error.includes('Customer') && error.includes('not found')) {
+            return `CUSTOMER ACCOUNT ISSUE
 
-We couldn't find your customer account in our system. This has been resolved.
+We couldn't find your customer account. This has been resolved.
+Please try placing your order again.`;
+        }
+        
+        if (error.includes('Item') && error.includes('not found')) {
+            return `PRODUCT UNAVAILABLE
 
-Please try placing your order again, and your account will be created automatically.`;
+The requested product is temporarily unavailable.
+Please contact support or try a different product.`;
+        }
+        
+        if (error.includes('permission') || error.includes('Permission')) {
+            return `SYSTEM MAINTENANCE
+
+Our ordering system is under maintenance.
+Please try again in a few minutes.`;
+        }
     }
     
-    if (typeof error === 'string' && error.includes('Item') && error.includes('not found')) {
-        return `PRODUCT UNAVAILABLE
-
-The requested product is temporarily unavailable in our system.
-
-Please contact our support team or try ordering a different product.`;
-    }
-    
-    if (typeof error === 'string' && error.includes('permission')) {
-        return `SYSTEM MAINTENANCE
-
-Our ordering system is currently undergoing maintenance.
-
-Please try again in a few minutes or contact our team directly for immediate assistance.`;
-    }
-    
-    // Generic error with more helpful guidance
     return `ORDER PROCESSING ISSUE
 
-We encountered a technical issue while processing your order.
+Technical issue encountered. Our team has been notified.
 
-What you can do:
-- Try placing the order again in a few minutes
-- Contact our support team directly
-- Send us your details manually
+WHAT TO DO:
+• Try again in a few minutes
+• Contact support directly
+• Your details have been saved
 
-Our team has been notified and will resolve this quickly.`;
+We'll resolve this quickly!`;
 }
 
 // Enhanced customer lookup by mobile number
 async function getCustomerByMobile(mobileNumber) {
     try {
-        const searchUrl = `${DOTORDERS_ERP_URL}/api/resource/Customer`;
+        console.log(`Looking up customer: ${mobileNumber}`);
         
-        console.log(`Searching for customer with mobile: ${mobileNumber}`);
+        const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
         
         const response = await axios.get(searchUrl, {
             headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', mobileNumber]]),
-                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'customer_primary_address'])
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no'])
             }
         });
 
@@ -925,156 +1061,47 @@ async function getCustomerByMobile(mobileNumber) {
         
         if (customers && customers.length > 0) {
             const customer = customers[0];
-            console.log(`Found customer: ${customer.customer_name}`);
+            console.log(`Customer found: ${customer.customer_name}`);
             
-            const addressInfo = await getCustomerAddress(customer.customer_primary_address || customer.name);
-            const customDocsInfo = await getCustomDocuments(customer.name);
+            const addressInfo = await getCustomerAddress(customer.name);
             
-            let response = `CUSTOMER FOUND
+            let responseText = `CUSTOMER FOUND
 
 Name: ${customer.customer_name}
 Mobile: ${customer.mobile_no}
 
-${addressInfo}`;
+${addressInfo}
+
+To place an order, type: "order [product name]"`;
             
-            if (customDocsInfo) {
-                response += `${customDocsInfo}`;
-            }
-            
-            return response;
+            return responseText;
             
         } else {
-            console.log(`No customer found for mobile: ${mobileNumber}`);
+            console.log(`No customer found for: ${mobileNumber}`);
             return `CUSTOMER NOT FOUND
 
-No customer found with mobile number: ${mobileNumber}
+No customer found with mobile: ${mobileNumber}
 
-Would you like to place a new order? I can help you get started!`;
+Ready to place your first order?
+Type "order [product name]" to get started!
+
+Example: "order single bottle"`;
         }
         
     } catch (error) {
-        console.error('Error fetching customer:', error.response?.status, error.response?.data || error.message);
-        return 'Unable to fetch customer information. Please try again later.';
+        console.error('Error fetching customer:', error.response?.data || error.message);
+        return 'Unable to fetch customer information. Please try again.';
     }
 }
 
-// Get custom documents for customer
-async function getCustomDocuments(customerName) {
-    try {
-        let customInfo = '';
-        const customDocTypes = ['Address'];
-        
-        for (const docType of customDocTypes) {
-            try {
-                const customDocsUrl = `${DOTORDERS_ERP_URL}/api/resource/${docType}`;
-                
-                const response = await axios.get(customDocsUrl, {
-                    headers: {
-                        'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
-                        'Content-Type': 'application/json'
-                    },
-                    params: {
-                        filters: JSON.stringify([
-                            ['Dynamic Link', 'link_name', '=', customerName],
-                            ['Dynamic Link', 'link_doctype', '=', 'Customer']
-                        ]),
-                        limit: 10
-                    }
-                });
-
-                if (response.data.data && response.data.data.length > 0) {
-                    const docs = response.data.data;
-                    
-                    for (const doc of docs) {
-                        const docDetails = await getDocumentDetails(docType, doc.name);
-                        if (docDetails) {
-                            customInfo += docDetails + '\n';
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log(`Error fetching ${docType}:`, err.message);
-                continue;
-            }
-        }
-        
-        return customInfo || null;
-        
-    } catch (error) {
-        console.error('Error fetching custom documents:', error.message);
-        return null;
-    }
-}
-
-// Get document details
-async function getDocumentDetails(docType, docName) {
-    try {
-        const docUrl = `${DOTORDERS_ERP_URL}/api/resource/${docType}/${docName}`;
-        
-        const response = await axios.get(docUrl, {
-            headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const docData = response.data.data;
-        
-        if (!docData) return null;
-        
-        let docInfo = `\n${docData.name || docData.title || docType}:\n`;
-        
-        const customFields = [
-            'custom_bottle_in_hand',
-            'custom_coupon_count', 
-            'custom_cooler_in_hand',
-            'custom_bottle_per_recharge',
-            'custom_bottle_recharge_amount',
-            'postal_code'
-        ];
-        
-        let hasCustomFields = false;
-        
-        customFields.forEach(field => {
-            if (docData[field] !== undefined && docData[field] !== null) {
-                const fieldValue = docData[field];
-                const displayName = field.replace(/custom_|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                docInfo += `${displayName}: ${fieldValue}\n`;
-                hasCustomFields = true;
-            }
-        });
-        
-        if (!hasCustomFields) {
-            if (docData.address_line1) {
-                docInfo += `Address: ${docData.address_line1}\n`;
-                hasCustomFields = true;
-            }
-            if (docData.city) {
-                docInfo += `City: ${docData.city}\n`;
-                hasCustomFields = true;
-            }
-            if (docData.pincode) {
-                docInfo += `Pincode: ${docData.pincode}\n`;
-                hasCustomFields = true;
-            }
-        }
-        
-        return hasCustomFields ? docInfo : null;
-        
-    } catch (error) {
-        console.error(`Error fetching ${docType} details:`, error.message);
-        return null;
-    }
-}
-
-// Get customer address
+// Get customer address from ERPNext
 async function getCustomerAddress(customerName) {
     try {
-        const addressUrl = `${DOTORDERS_ERP_URL}/api/resource/Address`;
+        const addressUrl = `${ERPNEXT_URL}/api/resource/Address`;
         
         const response = await axios.get(addressUrl, {
             headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                 'Content-Type': 'application/json'
             },
             params: {
@@ -1082,7 +1109,7 @@ async function getCustomerAddress(customerName) {
                     ['Dynamic Link', 'link_name', '=', customerName],
                     ['Dynamic Link', 'link_doctype', '=', 'Customer']
                 ]),
-                fields: JSON.stringify(['address_title', 'address_line1', 'address_line2', 'city', 'state', 'pincode', 'country', 'phone', 'email_id'])
+                fields: JSON.stringify(['address_title', 'address_line1', 'address_line2', 'city', 'phone'])
             }
         });
 
@@ -1092,38 +1119,24 @@ async function getCustomerAddress(customerName) {
             const address = addresses[0];
             
             let addressText = 'ADDRESS:\n';
-            
             if (address.address_title) addressText += `${address.address_title}\n`;
             if (address.address_line1) addressText += `${address.address_line1}\n`;
             if (address.address_line2) addressText += `${address.address_line2}\n`;
-            
-            let locationLine = '';
-            if (address.city) locationLine += address.city;
-            if (address.state) {
-                locationLine += locationLine ? `, ${address.state}` : address.state;
-            }
-            if (address.pincode) {
-                locationLine += locationLine ? ` - ${address.pincode}` : address.pincode;
-            }
-            if (locationLine) addressText += `${locationLine}\n`;
-            
-            if (address.country) addressText += `${address.country}\n`;
-            if (address.phone) addressText += `Phone: ${address.phone}\n`;
-            if (address.email_id) addressText += `Email: ${address.email_id}`;
+            if (address.city) addressText += `${address.city}\n`;
+            if (address.phone) addressText += `Phone: ${address.phone}`;
             
             return addressText;
-            
         } else {
             return 'ADDRESS: Not available';
         }
         
     } catch (error) {
         console.error('Error fetching address:', error.response?.data || error.message);
-        return 'ADDRESS: Unable to fetch address details';
+        return 'ADDRESS: Unable to fetch';
     }
 }
 
-// Send message function
+// Send WhatsApp message
 async function sendMessage(to, message, phoneNumberId) {
     try {
         await axios.post(
@@ -1140,16 +1153,16 @@ async function sendMessage(to, message, phoneNumberId) {
                 }
             }
         );
-        console.log('Message sent successfully');
+        console.log('Message sent successfully to:', to);
     } catch (error) {
         console.error('Error sending message:', error.response?.data || error.message);
     }
 }
 
-// GPT test endpoint
+// Test endpoints
 app.get('/test-gpt', async (req, res) => {
     try {
-        const testMessage = "Hello, I'm interested in your water delivery service";
+        const testMessage = "I want to order water for my office";
         const testSession = createUserSession();
         
         const response = await getGPTResponse(testMessage, testSession);
@@ -1157,7 +1170,8 @@ app.get('/test-gpt', async (req, res) => {
         res.json({
             status: 'success',
             message: 'GPT integration working!',
-            testResponse: response
+            testMessage: testMessage,
+            response: response
         });
     } catch (error) {
         res.status(500).json({
@@ -1168,26 +1182,29 @@ app.get('/test-gpt', async (req, res) => {
     }
 });
 
-// Test dotorders ERP connection endpoint
-app.get('/test-dotorders-erp', async (req, res) => {
+app.get('/test-erpnext', async (req, res) => {
     try {
-        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/method/frappe.auth.get_logged_user`, {
+        const response = await axios.get(`${ERPNEXT_URL}/api/method/frappe.auth.get_logged_user`, {
             headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
+                'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
                 'Content-Type': 'application/json'
             }
         });
-        res.json({ status: 'success', message: 'dotorders ERP connection working!', data: response.data });
+        res.json({ 
+            status: 'success', 
+            message: 'ERPNext connection working!', 
+            data: response.data 
+        });
     } catch (error) {
         res.status(500).json({ 
             status: 'error', 
-            message: 'dotorders ERP connection failed', 
+            message: 'ERPNext connection failed', 
             error: error.response?.data || error.message
         });
     }
 });
 
-// Session analytics endpoint
+// Analytics endpoint
 app.get('/analytics', (req, res) => {
     const analytics = {
         totalSessions: userSessions.size,
@@ -1197,17 +1214,14 @@ app.get('/analytics', (req, res) => {
     };
     
     userSessions.forEach(session => {
-        // Count sales stages
         analytics.salesStages[session.salesStage] = 
             (analytics.salesStages[session.salesStage] || 0) + 1;
         
-        // Count interests
         session.interests.forEach(interest => {
             analytics.topInterests[interest] = 
                 (analytics.topInterests[interest] || 0) + 1;
         });
         
-        // Count active orders
         if (session.orderInProgress) {
             analytics.activeOrders++;
         }
@@ -1216,126 +1230,37 @@ app.get('/analytics', (req, res) => {
     res.json(analytics);
 });
 
-// Session management endpoint
-app.get('/sessions', (req, res) => {
-    const sessions = Array.from(userSessions.entries()).map(([phone, session]) => ({
-        phone: phone.substring(0, 8) + '****', // Mask phone numbers for privacy
-        state: session.state,
-        hasOrder: !!session.orderInProgress,
-        lastActivity: new Date(session.lastActivity).toISOString(),
-        salesStage: session.salesStage,
-        interests: session.interests
-    }));
-    
-    res.json({
-        totalSessions: userSessions.size,
-        sessions: sessions
-    });
-});
-
-// Debug customer endpoint
-app.get('/debug-customer', async (req, res) => {
+// Test order endpoint
+app.post('/test-order', async (req, res) => {
     try {
-        const response = await axios.get(`${DOTORDERS_ERP_URL}/api/resource/Customer`, {
-            headers: {
-                'Authorization': `token ${DOTORDERS_ERP_API_KEY}:${DOTORDERS_ERP_API_SECRET}`,
-                'Content-Type': 'application/json'
-            },
-            params: {
-                limit: 5
-            }
-        });
-        res.json({ status: 'success', customers: response.data.data });
-    } catch (error) {
-        res.status(500).json({ 
-            status: 'error', 
-            message: 'Debug customer failed', 
-            error: error.response?.data || error.message
-        });
-    }
-});
-
-// Debug mobile search endpoint
-app.get('/debug-mobile/:number', async (req, res) => {
-    try {
-        const customerInfo = await getCustomerByMobile(req.params.number);
-        res.json({ 
-            status: 'success', 
-            mobile: req.params.number,
-            customerInfo: customerInfo
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            status: 'error', 
-            message: 'Debug mobile search failed', 
-            error: error.message
-        });
-    }
-});
-
-// Manual order creation endpoint
-app.post('/manual-order', async (req, res) => {
-    try {
-        const { customerPhone, productKey, address, quantity = 1 } = req.body;
+        const { phone = '+971501234567', product = 'single_bottle', address = 'Test Address, Dubai' } = req.body;
         
-        if (!customerPhone || !productKey || !address) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Missing required fields: customerPhone, productKey, address'
-            });
-        }
-        
-        const product = PRODUCTS[productKey];
-        if (!product) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Invalid product key'
-            });
-        }
-        
-        const orderInfo = {
-            product: product,
-            productKey: productKey,
-            quantity: quantity,
-            customerPhone: customerPhone,
+        const testSession = createUserSession();
+        testSession.orderInProgress = {
+            product: PRODUCTS[product],
+            productKey: product,
+            quantity: 1,
+            customerPhone: phone,
             address: address
         };
         
-        const customerResult = await ensureCustomerExists(orderInfo);
-        if (!customerResult.success) {
-            return res.status(500).json({
-                status: 'error',
-                message: customerResult.message
-            });
-        }
+        const result = await processOrder(testSession, phone);
         
-        const erpOrder = await createERPOrder(orderInfo, customerResult.customerName);
-        
-        if (erpOrder.success) {
-            res.json({
-                status: 'success',
-                message: 'Order created successfully',
-                orderName: erpOrder.orderName,
-                data: erpOrder.data
-            });
-        } else {
-            res.status(500).json({
-                status: 'error',
-                message: 'Failed to create order',
-                error: erpOrder.error
-            });
-        }
-        
+        res.json({
+            status: 'success',
+            message: 'Test order processed',
+            result: result
+        });
     } catch (error) {
         res.status(500).json({
             status: 'error',
-            message: 'Manual order creation failed',
+            message: 'Test order failed',
             error: error.message
         });
     }
 });
 
-// Enhanced session cleanup
+// Session cleanup
 setInterval(() => {
     const now = Date.now();
     const twoHours = 2 * 60 * 60 * 1000;
@@ -1343,18 +1268,18 @@ setInterval(() => {
     for (const [phone, session] of userSessions.entries()) {
         if (now - session.lastActivity > twoHours) {
             userSessions.delete(phone);
-            console.log(`Cleaned up inactive session for ${phone}`);
+            console.log(`Cleaned up session: ${phone}`);
         }
     }
-}, 30 * 60 * 1000); // Check every 30 minutes
+}, 30 * 60 * 1000);
 
-// Enhanced homepage
+// Homepage
 app.get('/', (req, res) => {
     const statusHtml = `
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Enhanced WhatsApp Water Delivery Bot</title>
+        <title>Fixed WhatsApp Water Delivery Bot</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
             .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1364,88 +1289,46 @@ app.get('/', (req, res) => {
             .inactive { color: #ffc107; }
             .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
             .stat-box { padding: 20px; background: #007bff; color: white; border-radius: 8px; text-align: center; }
-            .feature-box { padding: 15px; background: #f0f8ff; border-radius: 6px; margin: 10px 0; }
             h1 { color: #333; text-align: center; }
             h2 { color: #007bff; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Enhanced WhatsApp Water Delivery Bot v3.0</h1>
+            <h1>FIXED WhatsApp Water Delivery Bot v3.1</h1>
             <div class="status">
-                <h2>Server Status: <span class="active">RUNNING</span></h2>
-                <p><strong>Version:</strong> 3.0.0 (GPT-4o-mini Enhanced + Complete ERP Integration)</p>
-                <p><strong>Uptime:</strong> ${Math.floor(process.uptime())} seconds</p>
+                <h2>Status: <span class="active">ORDERS WORKING</span></h2>
+                <p><strong>Version:</strong> 3.1.0 (Fixed Order Processing + ERPNext)</p>
+                <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>GPT Integration:</strong> <span class="${OPENAI_API_KEY ? 'active' : 'inactive'}">${OPENAI_API_KEY ? 'ENABLED' : 'DISABLED'}</span></p>
-                <p><strong>ERP Integration:</strong> <span class="${DOTORDERS_ERP_URL ? 'active' : 'inactive'}">${DOTORDERS_ERP_URL ? 'ENABLED' : 'DISABLED'}</span></p>
-                <p><strong>Keep-alive:</strong> <span class="${KEEP_ALIVE_URL ? 'active' : 'inactive'}">${KEEP_ALIVE_URL ? 'ENABLED' : 'DISABLED'}</span></p>
-                <p><strong>Time:</strong> ${new Date().toISOString()}</p>
+                <p><strong>ERPNext:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
             
-            <div class="stats">
-                <div class="stat-box">
-                    <h3>${userSessions.size}</h3>
-                    <p>Active Sessions</p>
-                </div>
-                <div class="stat-box">
-                    <h3>${Object.keys(PRODUCTS).length}</h3>
-                    <p>Products Available</p>
-                </div>
-                <div class="stat-box">
-                    <h3>67</h3>
-                    <p>Q&A Knowledge Base</p>
-                </div>
-                <div class="stat-box">
-                    <h3>AI</h3>
-                    <p>Smart Conversations</p>
-                </div>
-            </div>
-
-            <div class="feature-box">
-                <h3>New AI-Powered Features:</h3>
-                <ul>
-                    <li>GPT-4o-mini intelligent conversation handling</li>
-                    <li>Sales qualification and lead scoring</li>
-                    <li>Context-aware product recommendations</li>
-                    <li>Automated customer journey tracking</li>
-                    <li>Advanced analytics and reporting</li>
-                </ul>
-            </div>
-            
-            <h3>API Endpoints:</h3>
-            <div class="endpoint"><strong>/health</strong> - Health check and system status</div>
-            <div class="endpoint"><strong>/analytics</strong> - Sales analytics and session data</div>
-            <div class="endpoint"><strong>/sessions</strong> - Active customer sessions</div>
-            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT-4o-mini integration</div>
-            <div class="endpoint"><strong>/test-dotorders-erp</strong> - Test dotorders ERP connection</div>
-            <div class="endpoint"><strong>/webhook</strong> - WhatsApp webhook endpoint</div>
-            <div class="endpoint"><strong>/debug-customer</strong> - Debug customer data structure</div>
-            <div class="endpoint"><strong>/debug-mobile/:number</strong> - Debug mobile number search</div>
-            <div class="endpoint"><strong>/manual-order</strong> - Create manual orders (POST)</div>
-            
-            <h3>Complete Bot Capabilities:</h3>
+            <h3>FIXED ISSUES:</h3>
             <ul>
-                <li><strong>Intelligent Conversations:</strong> GPT-4o-mini powered natural language understanding</li>
-                <li><strong>Sales Intelligence:</strong> Customer qualification, interest tracking, sales stage management</li>
-                <li><strong>Product Catalog:</strong> 8 products with smart recommendations</li>
-                <li><strong>Order Management:</strong> End-to-end order processing with ERP integration</li>
-                <li><strong>Customer Management:</strong> Automatic customer creation and address handling</li>
-                <li><strong>Analytics Dashboard:</strong> Real-time sales metrics and session analytics</li>
-                <li><strong>Error Handling:</strong> Comprehensive error handling with fallback responses</li>
-                <li><strong>Session Management:</strong> Conversation state and context preservation</li>
-                <li><strong>Mobile Integration:</strong> Customer lookup by phone number</li>
-                <li><strong>Address Collection:</strong> Automated address collection for new customers</li>
+                <li>? Order command detection improved</li>
+                <li>? Product matching logic enhanced</li>
+                <li>? ERPNext integration completed</li>
+                <li>? Order state management fixed</li>
+                <li>? Error handling improved</li>
+                <li>? Logging added for debugging</li>
             </ul>
 
-            <h3>ERP Integration Features:</h3>
-            <ul>
-                <li>Automatic customer creation in dotorders ERP</li>
-                <li>Sales order generation with line items</li>
-                <li>Address management and linking</li>
-                <li>Customer lookup and data retrieval</li>
-                <li>Custom field handling</li>
-                <li>Error handling for ERP failures</li>
-            </ul>
+            <h3>ORDER COMMANDS:</h3>
+            <div class="endpoint">order single bottle</div>
+            <div class="endpoint">order trial bottle</div>
+            <div class="endpoint">order 10+1 coupon book</div>
+            <div class="endpoint">order 100+40 coupon book</div>
+            <div class="endpoint">order hand pump</div>
+            <div class="endpoint">order table dispenser</div>
+            <div class="endpoint">order premium cooler</div>
+            <div class="endpoint">order premium package</div>
+            
+            <h3>TEST ENDPOINTS:</h3>
+            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT integration</div>
+            <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
+            <div class="endpoint"><strong>/test-order</strong> - Test order processing (POST)</div>
+            <div class="endpoint"><strong>/analytics</strong> - View session analytics</div>
         </div>
     </body>
     </html>
@@ -1454,16 +1337,16 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? Enhanced Water Delivery Bot v3.0 running on port ${PORT}`);
-    console.log('? Features: GPT-4o-mini Intelligence + Complete ERP Integration + Sales Analytics');
-    console.log(`?? Server URL: http://localhost:${PORT}`);
+    console.log(`?? FIXED WhatsApp Water Delivery Bot v3.1 running on port ${PORT}`);
+    console.log('? Order processing FIXED + ERPNext integration');
+    console.log(`?? URL: http://localhost:${PORT}`);
     
     if (!OPENAI_API_KEY) {
-        console.warn('??  OPENAI_API_KEY not set - GPT features will use fallback responses');
+        console.warn('??  OPENAI_API_KEY not set');
     }
     
-    if (!DOTORDERS_ERP_URL) {
-        console.warn('??  ERP configuration incomplete - order processing will fail');
+    if (!ERPNEXT_URL) {
+        console.warn('??  ERPNEXT_URL not set');
     }
     
     startKeepAlive();

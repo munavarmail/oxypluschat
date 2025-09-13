@@ -300,7 +300,13 @@ function extractSalesIntelligence(gptResponse, session) {
 
 // Enhanced fallback response system
 function getFallbackResponse(message, session) {
-    const lowerMessage = message.toLowerCase();
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Handle greetings - show welcome menu
+    const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
+    if (greetings.some(greeting => lowerMessage.includes(greeting)) || lowerMessage === 'hi' || lowerMessage === 'hello') {
+        return WELCOME_MENU;
+    }
     
     // Order intent detection
     if (lowerMessage.includes('order') || lowerMessage.includes('buy') || lowerMessage.includes('purchase')) {
@@ -323,33 +329,46 @@ What would you like to order?`;
     }
     
     // Pricing questions
-    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-        return `Our transparent pricing:
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much') || lowerMessage.includes('pricing') || lowerMessage.includes('menu')) {
+        return `?? COMPLETE PRICING MENU
 
-WATER BOTTLES:
-• Single Bottle: AED 7 + AED 15 deposit
-• 10+1 Coupon Book: AED 70 (no deposit for 3 bottles)
-• 100+40 Coupon Book: AED 700 (no deposit for 5 bottles)
+?? WATER BOTTLES:
+• Single Bottle - AED 7 + AED 15 deposit
+• Trial Bottle - AED 7 + AED 15 deposit
 
-EQUIPMENT:
-• Hand Pump: AED 15
-• Table Dispenser: AED 25
-• Premium Cooler: AED 300 (1-year warranty)
+?? COUPON BOOKS (Better Value):
+• 10+1 Coupon Book - AED 70 (save on deposit)
+• 100+40 Coupon Book - AED 700 (BNPL available)
 
-To place an order, type: "order [product name]"
+?? EQUIPMENT:
+• Hand Pump - AED 15
+• Table Dispenser - AED 25
+• Premium Cooler - AED 300 (1-year warranty)
+
+?? PACKAGES:
+• 140 Bottles + Dispenser - AED 920
+
+To order, type: "order [product name]"
 
 How many bottles do you use per week? I can recommend the best value option.`;
     }
     
     // Delivery questions
-    if (lowerMessage.includes('deliver') || lowerMessage.includes('when') || lowerMessage.includes('schedule')) {
-        return `We deliver throughout Dubai, Sharjah, and Ajman (except freezones).
+    if (lowerMessage.includes('deliver') || lowerMessage.includes('when') || lowerMessage.includes('schedule') || lowerMessage.includes('delivery')) {
+        return `?? DELIVERY INFORMATION
 
-DELIVERY DETAILS:
+?? COVERAGE AREAS:
+Dubai, Sharjah, Ajman (except freezones)
+
+? DELIVERY OPTIONS:
 • Same-day/next-day delivery available
 • Weekly scheduled delivery setup
 • FREE delivery with coupon books
 • WhatsApp coordination for timing
+
+?? DELIVERY CHARGES:
+• FREE with coupon books
+• Standard charges for individual bottles
 
 To place an order for delivery, type:
 "order [product name]"
@@ -357,45 +376,167 @@ To place an order for delivery, type:
 Which area are you located in?`;
     }
 
-    // Menu/product list
-    if (lowerMessage.includes('menu') || lowerMessage.includes('products') || lowerMessage.includes('what do you sell')) {
-        return `WATER DELIVERY MENU:
+    // Payment methods
+    if (lowerMessage.includes('payment') || lowerMessage.includes('pay')) {
+        return `?? PAYMENT METHODS
 
-WATER BOTTLES:
-• Single Bottle - AED 7 (+15 deposit)
-• Trial Bottle - AED 7 (+15 deposit)
+We accept:
+• Cash on delivery
+• Bank transfer
+• Card payment (notify 1 day prior)
 
-COUPON BOOKS (Better Value):
-• 10+1 Coupon Book - AED 70
-• 100+40 Coupon Book - AED 700 (BNPL available)
+?? SPECIAL PAYMENT OPTIONS:
+• Buy Now Pay Later (ONLY for 100+40 Coupon Book)
 
-EQUIPMENT:
-• Hand Pump - AED 15
-• Table Dispenser - AED 25
-• Premium Cooler - AED 300
+?? PAYMENT BENEFITS:
+• No payment hassle with coupon books
+• Just exchange coupons for bottles
+• Better prices with advance payment
 
-PACKAGES:
-• 140 Bottles + Dispenser - AED 920
-
-To order any product, type: "order [product name]"
-
-What interests you most?`;
+Ready to place an order? Type: "order [product name]"`;
     }
 
-    // Default helpful response
+    // Customer support
+    if (lowerMessage.includes('support') || lowerMessage.includes('help') || lowerMessage.includes('contact')) {
+        return `?? CUSTOMER SUPPORT
+
+I'm here to help you with:
+• Product information and recommendations
+• Order placement and tracking
+• Delivery scheduling
+• Payment assistance
+• Account management
+
+?? NEED SPECIFIC HELP?
+• Order: "order [product name]"
+• Pricing: "pricing"
+• Delivery: "delivery info"
+• Account: Send your mobile number
+
+?? OTHER CONTACT METHODS:
+• WhatsApp: You're already here!
+• Phone support available during business hours
+
+What specific help do you need today?`;
+    }
+
+    // Complaint handling
+    if (lowerMessage.includes('complaint') || lowerMessage.includes('issue') || lowerMessage.includes('problem') || lowerMessage.includes('complain')) {
+        return `?? COMPLAINT / ISSUE REPORTING
+
+I'm sorry to hear you're experiencing an issue. I'm here to help resolve it quickly.
+
+?? COMMON ISSUES WE CAN HELP WITH:
+• Delivery delays or missed deliveries
+• Product quality concerns
+• Billing or payment issues
+• Customer service problems
+• Equipment malfunction
+
+?? TO HELP YOU BETTER:
+Please describe your issue in detail including:
+• Order number (if applicable)
+• Date of incident
+• Specific problem details
+• Your contact information
+
+Our team takes all complaints seriously and will respond within 2 hours.
+
+What specific issue would you like to report?`;
+    }
+
+    // Special offers
+    if (lowerMessage.includes('offer') || lowerMessage.includes('deal') || lowerMessage.includes('discount') || lowerMessage.includes('promo')) {
+        return `?? SPECIAL OFFERS & DEALS
+
+?? CURRENT PROMOTIONS:
+• 10+1 Coupon Book: Get 11 bottles for price of 10!
+• 100+40 Coupon Book: Get 140 bottles (40 FREE!)
+• Buy Now Pay Later on 100+40 package
+
+?? MONEY-SAVING OPTIONS:
+• Coupon books eliminate bottle deposits
+• FREE delivery with coupon purchases
+• Volume discounts for bulk orders
+• No hidden costs - transparent pricing
+
+?? BUSINESS PACKAGES:
+Special rates for offices and commercial customers
+
+?? FIRST-TIME CUSTOMERS:
+Try our Trial Bottle to experience quality
+
+To take advantage of any offer, type: "order [product name]"
+
+Which offer interests you most?`;
+    }
+
+    // Company information
+    if (lowerMessage.includes('about') || lowerMessage.includes('company') || lowerMessage.includes('info')) {
+        return `?? ABOUT OUR COMPANY
+
+?? PREMIUM WATER DELIVERY SERVICE
+• Based in Ajman, UAE
+• 10+ years of trusted service
+• Serving Dubai, Sharjah, Ajman
+
+?? QUALITY COMMITMENT:
+• 100% virgin material bottles
+• Low sodium, pH-balanced water
+• Rigorous quality testing
+• Superior customer service
+
+?? SERVICE EXCELLENCE:
+• Reliable delivery network
+• Professional delivery team
+• WhatsApp-based coordination
+• Flexible scheduling options
+
+?? WHY CHOOSE US:
+• Transparent pricing (no hidden costs)
+• Equipment options available
+• Flexible payment methods
+• Customer-first approach
+
+Ready to experience our premium service?
+Type: "order [product name]"`;
+    }
+
+    // Account lookup
+    if (lowerMessage.includes('account') || lowerMessage.includes('profile') || lowerMessage.includes('my details')) {
+        return `?? ACCOUNT LOOKUP
+
+To check your account details, please send your mobile number.
+
+?? WHAT YOU'LL SEE:
+• Customer name and contact info
+• Delivery address on file
+• Order history
+• Account preferences
+
+?? PRIVACY NOTE:
+Your information is secure and only used for service delivery.
+
+?? NEW CUSTOMER?
+No account yet? No problem! You can place your first order immediately.
+
+Send your mobile number or type "order [product name]" to get started.`;
+    }
+
+    // Default response with menu
     return `Hello! I'm here to help with our premium water delivery service.
 
-I can assist with:
-• Product information and pricing
-• Placing orders
-• Delivery scheduling
-• Payment options
+Type any of these for quick help:
+• "pricing" - View all prices
+• "delivery" - Delivery information
+• "payment" - Payment methods
+• "offers" - Special deals
+• "support" - Get help
+• "complaint" - Report issues
+• Send mobile number - Check account
 
-QUICK ORDER:
-Type "order [product name]" to place an order
-Example: "order single bottle"
-
-Or type "menu" to see all products.
+Or place an order directly:
+"order [product name]"
 
 What can I help you with today?`;
 }
