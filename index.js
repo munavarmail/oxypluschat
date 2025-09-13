@@ -1850,12 +1850,12 @@ app.get('/', (req, res) => {
                 </div>
                 
                 <div>
-                    <h3>?? FLEXIBLE LOCATION SERVICES:</h3>
-                    <div class="feature">? WhatsApp GPS location capture</div>
-                    <div class="feature">? Manual address input option</div>
-                    <div class="feature">? Service area validation (both methods)</div>
-                    <div class="feature">? Coordinate storage in ERPNext</div>
-                    <div class="feature">? Distance calculations & delivery optimization</div>
+                    <h3>?? DUAL LOCATION REQUIREMENT:</h3>
+                    <div class="feature">? NEW CUSTOMERS: Both manual address + GPS required</div>
+                    <div class="feature">? Manual address entry (Step 1)</div>
+                    <div class="feature">? GPS location sharing (Step 2)</div>
+                    <div class="feature">? Existing customers: Use saved information</div>
+                    <div class="feature">? Complete delivery accuracy & optimization</div>
                 </div>
             </div>
 
@@ -1867,11 +1867,11 @@ app.get('/', (req, res) => {
             <div class="endpoint">"need pump" ? Hand Pump</div>
             <div class="endpoint">"bulk pack" ? 100+40 Coupon</div>
             
-            <h3>?? LOCATION OPTIONS:</h3>
-            <div class="endpoint"><strong>GPS Location:</strong> Share location ? Instant GPS validation & coordinate storage</div>
-            <div class="endpoint"><strong>Manual Address:</strong> Type address ? Area validation & address storage</div>
-            <div class="endpoint"><strong>Service Areas:</strong> Dubai (50km), Sharjah (30km), Ajman (25km)</div>
-            <div class="endpoint"><strong>Smart Detection:</strong> Automatically recognizes address format</div>
+            <h3>?? NEW CUSTOMER SETUP:</h3>
+            <div class="endpoint"><strong>Step 1:</strong> Type complete manual address</div>
+            <div class="endpoint"><strong>Step 2:</strong> Share GPS location ??</div>
+            <div class="endpoint"><strong>Result:</strong> Both saved for optimal delivery</div>
+            <div class="endpoint"><strong>Existing customers:</strong> Proceed with saved info</div>
 
             <h3>?? TEST ENDPOINTS:</h3>
             <div class="endpoint"><strong>/test-smart-match</strong> - Test smart order recognition</div>
