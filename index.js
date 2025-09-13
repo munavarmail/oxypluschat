@@ -1502,7 +1502,7 @@ async function createERPNextCustomer(orderInfo) {
             mobile_no: orderInfo.customerPhone,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: 'UAE'
+            territory: ''
         };
         
         const response = await axios.post(
