@@ -1360,14 +1360,19 @@ async function processOrder(session, userPhone) {
             session.orderInProgress = null;
             session.salesStage = 'completed';
             
+            const orderNumber = erpOrder.orderName || 'Generated';
+            console.log('Order created successfully with number:', orderNumber);
+            
             return `ORDER CONFIRMED SUCCESSFULLY!
 
-Order Number: ${erpOrder.orderName}
-Product: ${orderInfo.product.name}
-Total Amount: AED ${orderInfo.product.price + orderInfo.product.deposit}
+?? ORDER NUMBER: ${orderNumber}
+?? Product: ${orderInfo.product.name}
+?? Total Amount: AED ${orderInfo.product.price + orderInfo.product.deposit}
 
-Our delivery team will contact you within 2 hours to schedule delivery.
-Payment: Cash/Card on delivery
+NEXT STEPS:
+• Our delivery team will contact you within 2 hours
+• Payment: Cash/Card on delivery
+• Delivery to: ${orderInfo.address || 'Address on file'}
 
 Thank you for choosing our premium water service!
 
