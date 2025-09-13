@@ -1264,7 +1264,7 @@ async function createERPNextCustomer(orderInfo) {
             mobile_no: orderInfo.customerPhone,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: ''
+            territory: 'UAE'
         };
         
         // Add coordinates if available
@@ -1595,8 +1595,8 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? Intent Understanding WhatsApp Bot v5.0 running on port ${PORT}`);
-    console.log('? Intent understanding + location attachment + coordinate storage');
+    console.log(`?? Fast Order WhatsApp Bot v5.0 running on port ${PORT}`);
+    console.log('? Fast ordering + location attachment + coordinate storage');
     console.log(`?? URL: http://localhost:${PORT}`);
     
     if (!OPENAI_API_KEY) {

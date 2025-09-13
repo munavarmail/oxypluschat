@@ -120,9 +120,9 @@ PRODUCTS AND PRICING:
 7. 100+40 Coupon Book - AED 700 (140 bottles, best value, BNPL available)
 8. Premium Package - AED 920 (140 bottles + premium dispenser)
 
-INTENT UNDERSTANDING:
-Understand customer purpose through conversation rather than showing menu options.
-Ask qualifying questions to understand their water needs and recommend appropriate products.
+FAST ORDER APPROACH:
+Immediately show products with prices and order examples to minimize customer typing.
+Focus on quick order completion rather than lengthy qualification.
 
 PAYMENT METHODS:
 - Cash payment on delivery
@@ -191,7 +191,116 @@ function startKeepAlive() {
     setInterval(keepAlive, KEEP_ALIVE_INTERVAL);
 }
 
-// Enhanced customer identification with intent understanding
+// Fast order-focused welcome menu
+async function showFastOrderMenu(message, session) {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Check for greeting patterns
+    const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
+    const isGreeting = greetings.some(greeting => lowerMessage.includes(greeting)) || lowerMessage === 'hi' || lowerMessage === 'hello';
+    
+    if (isGreeting) {
+        return `WELCOME TO PREMIUM WATER DELIVERY! 
+
+QUICK ORDER - Just type what you want:
+• "single bottle" ? AED 7 + AED 15 deposit
+• "coupon book" ? AED 70 (11 bottles, best value)
+• "bulk package" ? AED 700 (140 bottles, huge savings)
+• "premium cooler" ? AED 300 (hot & cold water)
+• "hand pump" ? AED 15 (most affordable)
+
+INSTANT SERVICES:
+?? Check account ? Send your mobile number
+?? Update address ? Type "address" or share location
+?? View all prices ? Type "prices"
+?? Delivery info ? Type "delivery"
+? Get help ? Type "support"
+
+EXAMPLES TO ORDER NOW:
+"I want single bottle"
+"Give me coupon book" 
+"Send premium cooler"
+"I need bulk package"
+
+What would you like to order?`;
+    }
+    
+    // Handle quick order intents
+    if (lowerMessage.includes('water') || lowerMessage.includes('bottle') || lowerMessage.includes('delivery')) {
+        return `WATER DELIVERY OPTIONS:
+
+MOST POPULAR:
+• Single Bottle ? AED 7 + deposit (try our quality)
+• 10+1 Coupon Book ? AED 70 (11 bottles, no deposits)
+• 100+40 Coupon Book ? AED 700 (140 bottles, best deal)
+
+ORDER NOW - Just say:
+"I want single bottle"
+"Give me coupon book"
+"Send bulk package"
+
+Which one interests you?`;
+    }
+    
+    if (lowerMessage.includes('dispenser') || lowerMessage.includes('cooler') || lowerMessage.includes('pump')) {
+        return `WATER EQUIPMENT:
+
+?? Hand Pump ? AED 15 (manual, cheapest)
+?? Table Dispenser ? AED 25 (no electricity)
+?? Premium Cooler ? AED 300 (hot & cold, 1-year warranty)
+
+ORDER NOW - Just say:
+"I want hand pump"
+"Give me table dispenser"
+"Send premium cooler"
+
+Which equipment do you need?`;
+    }
+    
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
+        return `COMPLETE PRICE LIST:
+
+WATER BOTTLES:
+• Single Bottle ? AED 7 + AED 15 deposit
+• 10+1 Coupon Book ? AED 70 (save money!)
+• 100+40 Coupon Book ? AED 700 (best value!)
+
+EQUIPMENT:
+• Hand Pump ? AED 15
+• Table Dispenser ? AED 25
+• Premium Cooler ? AED 300
+
+PACKAGES:
+• 140 bottles + dispenser ? AED 920
+
+ORDER NOW - Just type:
+"I want [product name]"
+
+What would you like to order?`;
+    }
+    
+    // Default quick action menu
+    return `FAST ORDER MENU:
+
+TOP SELLERS:
+• "single bottle" ? AED 7 (try quality)
+• "coupon book" ? AED 70 (11 bottles)
+• "premium cooler" ? AED 300 (hot/cold)
+
+QUICK ACTIONS:
+• Send mobile number ? Check account
+• Type "prices" ? View all costs
+• Type "delivery" ? Delivery info
+
+ORDER EXAMPLES:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What can I get for you?`;
+}
+
+// Enhanced customer identification with fast order focus
 async function identifyCustomer(message, session, userPhone) {
     const lowerMessage = message.toLowerCase().trim();
     
@@ -207,7 +316,12 @@ async function identifyCustomer(message, session, userPhone) {
             
             return `${customerInfo}
 
-How can I help you today? Are you looking to place a new order or need assistance with something else?`;
+Ready to place another order? Just say:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order today?`;
         } else {
             session.state = 'new_customer_setup';
             session.isExistingCustomer = false;
@@ -216,81 +330,6 @@ How can I help you today? Are you looking to place a new order or need assistanc
     }
     
     return null; // Not a mobile number
-}
-
-// Intent understanding instead of menu display
-async function understandCustomerIntent(message, session) {
-    const lowerMessage = message.toLowerCase().trim();
-    
-    // Check for greeting patterns
-    const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
-    const isGreeting = greetings.some(greeting => lowerMessage.includes(greeting)) || lowerMessage === 'hi' || lowerMessage === 'hello';
-    
-    if (isGreeting) {
-        return `Hello! I'm here to help you with premium water delivery in Dubai, Sharjah, and Ajman.
-
-What brings you here today? Are you:
-- Looking for water bottles for home or office?
-- Interested in water dispensers or coolers?
-- Need regular water delivery service?
-- Have questions about our products?
-
-Just tell me what you're looking for and I'll help you find the perfect solution.`;
-    }
-    
-    // Detect specific intents
-    if (lowerMessage.includes('water') || lowerMessage.includes('bottle') || lowerMessage.includes('delivery')) {
-        session.qualification.purpose = 'water_delivery';
-        return `I can help you with water delivery! 
-
-To recommend the best option for you, let me ask:
-- Is this for home or office use?
-- How many people typically drink the water?
-- Are you looking for a one-time order or regular delivery?
-
-Based on your needs, I can suggest from single bottles to bulk packages with significant savings.`;
-    }
-    
-    if (lowerMessage.includes('dispenser') || lowerMessage.includes('cooler') || lowerMessage.includes('pump')) {
-        session.qualification.purpose = 'equipment';
-        return `Looking for water dispensers or equipment? Great choice!
-
-We offer:
-- Hand Pump (AED 15) - Most economical, manual operation
-- Table Dispenser (AED 25) - No electricity needed, convenient
-- Premium Cooler (AED 300) - Hot & cold water, 1-year warranty
-
-What type of setup do you prefer? Electric with hot/cold water, or a simpler manual option?`;
-    }
-    
-    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-        return `Our pricing is transparent with no hidden costs:
-
-WATER BOTTLES:
-Single Bottle: AED 7 + AED 15 deposit (refundable)
-
-BETTER VALUE PACKAGES:
-10+1 Coupon Book: AED 70 (11 bottles, save on deposits)
-100+40 Coupon Book: AED 700 (140 bottles, best savings)
-
-EQUIPMENT:
-Hand Pump: AED 15
-Table Dispenser: AED 25  
-Premium Cooler: AED 300
-
-What's your typical water consumption like? I can recommend the most cost-effective option for you.`;
-    }
-    
-    // Default conversational response for intent discovery
-    return `I'd be happy to help you find the right water solution!
-
-Could you tell me a bit more about what you're looking for? For example:
-- Are you setting up water for a new home or office?
-- Looking to switch from your current water supplier?
-- Need equipment like dispensers or coolers?
-- Want to know about our delivery service?
-
-The more I know about your needs, the better I can help you choose the perfect option.`;
 }
 
 // Enhanced location collection with attachment instructions
@@ -351,7 +390,12 @@ Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}
 Area: ${locationValidation.area}, ${locationValidation.city}
 Delivery time: ${locationValidation.estimatedDelivery}
 
-What would you like to order today?`;
+Ready to order? Just say:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order?`;
                 } else {
                     session.state = 'collecting_customer_name';
                     return `Perfect! Location coordinates saved.
@@ -558,7 +602,12 @@ Please add more details:`;
             return `Address saved to your profile:
 ${address}
 
-What would you like to order today?`;
+Ready to order? Just say:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order?`;
         } else {
             session.state = 'collecting_customer_name';
             return `Address confirmed:
@@ -571,7 +620,7 @@ Now I need your name for delivery. What name should I use for your orders?`;
     return `Address updated:
 ${address}
 
-How can I help you today?`;
+Ready to order? Just say what you want!`;
 }
 
 // Save address to existing customer in ERPNext
@@ -627,7 +676,14 @@ Name: ${customerName}
 Phone: ${userPhone}
 Address: ${session.customerLocation.address || 'Location coordinates saved'}
 
-Your profile is ready for orders! What would you like to order today?`;
+Your profile is ready for orders! 
+
+Ready to order? Just say:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order?`;
 }
 
 // Enhanced customer lookup with location info
@@ -798,41 +854,43 @@ function formatDate(dateString) {
     }
 }
 
-// GPT-4o-mini integration with intent understanding focus
+// GPT-4o-mini integration with fast order focus
 async function getGPTResponse(userMessage, session, context = '') {
     try {
         const conversationHistory = session.conversationHistory.slice(-8);
         
-        const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE. 
+        const systemPrompt = `You are a sales-focused assistant for a premium water delivery service in UAE. 
 
-INTENT UNDERSTANDING:
-Instead of showing menu options, understand customer purpose through conversation.
-Ask qualifying questions to determine their needs before recommending products.
+PRIMARY GOAL: Get customers to place orders quickly with minimal typing.
 
-CONVERSATION APPROACH:
-1. Understand why they contacted you (new setup, existing customer needs, equipment, etc.)
-2. Ask about their usage patterns, location, current situation
-3. Recommend appropriate products based on their specific needs
-4. Be conversational and helpful, not pushy
+FAST ORDER APPROACH:
+When customers greet you, immediately show available products with prices and simple order examples.
+Don't ask many questions - provide options and encourage immediate ordering.
 
-FLEXIBLE ORDER HANDLING:
-Accept natural language for orders. When customers show intent to buy, guide them through:
-1. Product confirmation
-2. Address collection (prioritize location attachment)
-3. Order confirmation
+PRODUCT RECOMMENDATIONS:
+- Single Bottle (AED 7) - for new customers to try
+- 10+1 Coupon Book (AED 70) - most popular, good value
+- 100+40 Coupon Book (AED 700) - best savings, bulk buyers
+- Premium Cooler (AED 300) - equipment needs
+
+ORDER EXAMPLES TO SHOW:
+"I want single bottle"
+"Give me coupon book" 
+"Send premium cooler"
+"I need bulk package"
+
+CONVERSATION STYLE:
+1. Be direct and sales-focused
+2. Show prices clearly
+3. Give easy ordering examples
+4. Minimize customer typing required
+5. Push toward quick order completion
+6. Use minimal text, no excessive formatting
 
 CONTEXT:
 ${KNOWLEDGE_BASE}
 
 ${context}
-
-CONVERSATION GUIDELINES:
-1. Focus on understanding customer intent first
-2. Ask qualifying questions about usage, location, current supplier
-3. Recommend based on actual needs, not just features
-4. Be conversational and consultative
-5. Handle objections with value propositions
-6. Guide toward appropriate products naturally
 
 Current conversation: ${JSON.stringify(conversationHistory)}`;
 
@@ -845,7 +903,7 @@ Current conversation: ${JSON.stringify(conversationHistory)}`;
         const response = await axios.post(OPENAI_API_URL, {
             model: 'gpt-4o-mini',
             messages: messages,
-            max_tokens: 500,
+            max_tokens: 400,
             temperature: 0.7,
             presence_penalty: 0.6,
             frequency_penalty: 0.3
@@ -925,55 +983,153 @@ function detectOrderingIntent(message) {
     return hasOrderIntent && hasProductReference;
 }
 
-// Enhanced fallback response with intent understanding
+// Enhanced fallback response with fast order focus
 function getFallbackResponse(message, session) {
     const lowerMessage = message.toLowerCase().trim();
     
-    // Handle greetings with intent understanding instead of menu
+    // Handle greetings with fast order menu
     const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
     if (greetings.some(greeting => lowerMessage.includes(greeting)) || lowerMessage === 'hi' || lowerMessage === 'hello') {
-        return understandCustomerIntent(message, session);
+        return `WELCOME TO PREMIUM WATER DELIVERY!
+
+QUICK ORDER - Just type what you want:
+• "single bottle" ? AED 7 + AED 15 deposit
+• "coupon book" ? AED 70 (11 bottles, best value)
+• "bulk package" ? AED 700 (140 bottles, huge savings)
+• "premium cooler" ? AED 300 (hot & cold water)
+• "hand pump" ? AED 15 (most affordable)
+
+INSTANT SERVICES:
+?? Check account ? Send your mobile number
+?? Update address ? Type "address" or share location
+?? View all prices ? Type "prices"
+?? Delivery info ? Type "delivery"
+? Get help ? Type "support"
+
+EXAMPLES TO ORDER NOW:
+"I want single bottle"
+"Give me coupon book" 
+"Send premium cooler"
+"I need bulk package"
+
+What would you like to order?`;
     }
     
-    // Order intent detection
-    if (detectOrderingIntent(message)) {
-        return `I'd be happy to help you place an order!
+    // Order intent detection with immediate product suggestions
+    if (lowerMessage.includes('order') || lowerMessage.includes('buy') || lowerMessage.includes('purchase') || lowerMessage.includes('want') || lowerMessage.includes('need') || lowerMessage.includes('get')) {
+        return `READY TO ORDER? Great!
 
-To recommend the best option, could you tell me:
-- Is this for home or office use?
-- How many people typically drink the water?
-- Are you looking for equipment like dispensers too?
+TOP PICKS:
+• Single Bottle ? AED 7 (perfect to try)
+• 10+1 Coupon Book ? AED 70 (popular choice)
+• 100+40 Coupon Book ? AED 700 (best savings)
+• Premium Cooler ? AED 300 (complete solution)
 
-Based on your needs, I can suggest anything from single bottles (AED 7) to bulk packages (up to 140 bottles) with significant savings.`;
+JUST SAY:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+"I need bulk package"
+
+Which one interests you?`;
     }
     
-    // Pricing questions with consultation approach
-    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much')) {
-        return `Our pricing is designed to offer great value:
+    // Pricing with immediate order options
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much') || lowerMessage.includes('pricing') || lowerMessage.includes('menu')) {
+        return `COMPLETE PRICING:
 
-SINGLE BOTTLE: AED 7 + AED 15 deposit
-VALUE PACKAGES: 
-- 10+1 bottles: AED 70 (save on deposits)
-- 100+40 bottles: AED 700 (best savings)
+WATER BOTTLES:
+• Single Bottle ? AED 7 + AED 15 deposit
+• 10+1 Coupon Book ? AED 70 (save money!)
+• 100+40 Coupon Book ? AED 700 (best value!)
 
 EQUIPMENT:
-- Hand Pump: AED 15
-- Table Dispenser: AED 25
-- Premium Cooler: AED 300
+• Hand Pump ? AED 15
+• Table Dispenser ? AED 25
+• Premium Cooler ? AED 300
 
-To give you the best recommendation, what's your typical water usage? Are you setting up for a household or office?`;
+ORDER NOW - Just type:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order?`;
     }
     
-    // Default intent discovery
-    return `I'm here to help you with premium water delivery in Dubai, Sharjah, and Ajman.
+    // Delivery info with order encouragement
+    if (lowerMessage.includes('deliver') || lowerMessage.includes('when') || lowerMessage.includes('schedule') || lowerMessage.includes('delivery')) {
+        return `DELIVERY INFORMATION:
 
-What brings you here today? Are you:
-- Setting up water service for a new home or office?
-- Looking to switch from your current supplier?
-- Need water equipment like dispensers or coolers?
-- Want to know about regular delivery options?
+?? AREAS: Dubai, Sharjah, Ajman (no freezones)
+? TIMING: Same-day/next-day delivery
+?? FREE delivery with coupon books
+?? Standard charges for single bottles
 
-Just let me know what you're looking for and I'll help you find the perfect solution!`;
+READY TO ORDER?
+"I want single bottle" ? Delivered today
+"Give me coupon book" ? FREE delivery
+"Send bulk package" ? Best value + FREE delivery
+
+Which delivery option interests you?`;
+    }
+
+    // Payment with order push
+    if (lowerMessage.includes('payment') || lowerMessage.includes('pay')) {
+        return `PAYMENT OPTIONS:
+
+?? Cash on delivery
+?? Bank transfer
+?? Card payment (notify 1 day prior)
+?? Buy Now Pay Later (for 100+40 package only)
+
+EASY ORDERING:
+"I want single bottle" ? Pay cash on delivery
+"Give me coupon book" ? Better value option
+"Send bulk package" ? BNPL available
+
+Ready to place your order?`;
+    }
+
+    // Support with order assistance
+    if (lowerMessage.includes('support') || lowerMessage.includes('help') || lowerMessage.includes('contact')) {
+        return `CUSTOMER SUPPORT & ORDERING HELP:
+
+NEED HELP ORDERING?
+Just type exactly what you want:
+• "I want single bottle"
+• "Give me coupon book"
+• "Send premium cooler"
+• "I need bulk package"
+
+OTHER HELP:
+• Product questions
+• Delivery scheduling
+• Payment assistance
+• Account management
+
+What would you like to order or need help with?`;
+    }
+
+    // Address/location with order continuation
+    if (lowerMessage.includes('address') || lowerMessage.includes('location')) {
+        return requestLocationWithInstructions(session, 'help');
+    }
+
+    // Default fast order response
+    return `PREMIUM WATER DELIVERY:
+
+QUICK ORDER OPTIONS:
+• "single bottle" ? AED 7 (try our quality)
+• "coupon book" ? AED 70 (11 bottles)
+• "bulk package" ? AED 700 (140 bottles)
+• "premium cooler" ? AED 300 (hot/cold)
+
+JUST TYPE:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like to order?`;
 }
 
 // Helper function to detect mobile numbers
@@ -1013,7 +1169,7 @@ async function buildContextForGPT(session, userPhone) {
     return context;
 }
 
-// Enhanced message handling with intent understanding
+// Enhanced message handling with fast order focus
 async function handleIncomingMessage(message, phoneNumberId) {
     const from = message.from;
     const messageBody = message.text?.body;
@@ -1069,14 +1225,14 @@ async function handleIncomingMessage(message, phoneNumberId) {
         else if (messageBody && detectOrderingIntent(messageBody)) {
             response = await handleFlexibleOrderCommand(messageBody, session, from);
         }
-        // Use intent understanding or GPT
+        // Use fast order menu or GPT
         else if (messageBody) {
-            // Check if it's a greeting and no customer info yet
+            // Check if it's a greeting - show fast order menu immediately
             const greetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'salaam', 'assalam', 'start'];
             const isGreeting = greetings.some(greeting => messageBody.toLowerCase().includes(greeting));
             
             if (isGreeting && !session.customerInfo) {
-                response = await understandCustomerIntent(messageBody, session);
+                response = await showFastOrderMenu(messageBody, session);
             } else {
                 const context = await buildContextForGPT(session, from);
                 response = await getGPTResponse(messageBody, session, context);
@@ -1112,14 +1268,21 @@ async function handleFlexibleOrderCommand(message, session, userPhone) {
     }
     
     if (!selectedProduct) {
-        return `I understand you'd like to place an order! 
+        return `Ready to order! Which product interests you?
 
-To help you choose the right product, could you tell me:
-- Are you looking for water bottles, dispensers, or a complete package?
-- Is this for home or office use?
-- How many people typically drink the water?
+TOP SELLERS:
+• Single Bottle ? AED 7 (perfect to try)
+• 10+1 Coupon Book ? AED 70 (popular choice)
+• 100+40 Coupon Book ? AED 700 (best savings)
+• Premium Cooler ? AED 300 (complete solution)
 
-Based on your needs, I can recommend from single bottles to bulk packages with significant savings.`;
+JUST SAY:
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+"I need bulk package"
+
+Which one do you want?`;
     }
     
     // Start order process
@@ -1155,7 +1318,14 @@ async function handleOrderConfirmation(message, session, userPhone) {
     } else if (lowerMessage.includes('no') || lowerMessage.includes('cancel') || lowerMessage === 'n') {
         session.state = 'active';
         session.orderInProgress = null;
-        return `Order cancelled. No problem! Let me know if you'd like to order something else or have any questions.`;
+        return `Order cancelled. 
+
+Ready to try something else?
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"
+
+What would you like?`;
     } else {
         return `Please confirm your order by replying:
 - "YES" or "CONFIRM" to proceed
@@ -1210,7 +1380,12 @@ Total Amount: AED ${orderInfo.product.price + orderInfo.product.deposit}
 Our delivery team will contact you within 2 hours to schedule delivery.
 Payment: Cash/Card on delivery
 
-Thank you for choosing our premium water service!`;
+Thank you for choosing our premium water service!
+
+Need anything else?
+"I want single bottle"
+"Give me coupon book"
+"Send premium cooler"`;
         } else {
             return handleOrderError(erpOrder.error, erpOrder.errorType);
         }
@@ -1264,7 +1439,7 @@ async function createERPNextCustomer(orderInfo) {
             mobile_no: orderInfo.customerPhone,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: ''
+            territory: 'UAE'
         };
         
         // Add coordinates if available
@@ -1443,12 +1618,12 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development',
-        version: '5.0.0-Intent-Understanding-Location',
+        version: '5.0.0-Fast-Order-Location',
         activeSessions: userSessions.size,
         features: {
             gptIntegration: !!OPENAI_API_KEY,
             erpnextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
-            intentUnderstanding: true,
+            fastOrdering: true,
             locationAttachment: true,
             coordinateStorage: true,
             addressSaving: true
@@ -1535,7 +1710,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Intent Understanding WhatsApp Bot</title>
+        <title>Fast Order WhatsApp Bot</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1549,21 +1724,22 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>Intent Understanding WhatsApp Bot v5.0</h1>
+            <h1>Fast Order WhatsApp Bot v5.0</h1>
             <div class="status">
-                <h2>Status: <span class="active">INTENT UNDERSTANDING + LOCATION ATTACHMENT</span></h2>
-                <p><strong>Version:</strong> 5.0.0 (Conversational Intent Recognition)</p>
+                <h2>Status: <span class="active">FAST ORDER + LOCATION ATTACHMENT</span></h2>
+                <p><strong>Version:</strong> 5.0.0 (Direct Sales & Quick Orders)</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
-                <p><strong>Features:</strong> Intent Understanding, Location Attachment, Coordinate Storage</p>
+                <p><strong>Features:</strong> Fast Ordering, Location Attachment, Coordinate Storage</p>
             </div>
             
             <div class="feature">
-                <h3>NEW INTENT UNDERSTANDING:</h3>
+                <h3>FAST ORDER SYSTEM:</h3>
                 <ul>
-                    <li>No more menu options - understands customer purpose naturally</li>
-                    <li>Asks qualifying questions to determine needs</li>
-                    <li>Recommends products based on actual requirements</li>
-                    <li>Conversational and consultative approach</li>
+                    <li>Immediate product display with prices on greeting</li>
+                    <li>Clear order examples: "I want single bottle", "Give me coupon book"</li>
+                    <li>Minimal typing required from customers</li>
+                    <li>Direct sales focus - quick path to order completion</li>
+                    <li>Instant service options: account check, address update, pricing</li>
                 </ul>
             </div>
 
@@ -1578,11 +1754,12 @@ app.get('/', (req, res) => {
                 </ul>
             </div>
             
-            <h3>CONVERSATION EXAMPLES:</h3>
-            <div class="endpoint">"Hi" ? "What brings you here today? Looking for water bottles, dispensers...?"</div>
-            <div class="endpoint">"I need water" ? "Is this for home or office? How many people?"</div>
-            <div class="endpoint">Location attachment ? Coordinates saved to customer profile</div>
-            <div class="endpoint">Manual address ? Saved to ERPNext customer address</div>
+            <h3>FAST ORDER EXAMPLES:</h3>
+            <div class="endpoint">"Hi" ? Immediate menu with prices + order examples</div>
+            <div class="endpoint">"I want single bottle" ? Direct order processing</div>
+            <div class="endpoint">"Give me coupon book" ? Quick product confirmation</div>
+            <div class="endpoint">Location attachment ? Coordinates saved instantly</div>
+            <div class="endpoint">"+971501234567" ? Account lookup + order options</div>
             
             <h3>TEST ENDPOINTS:</h3>
             <div class="endpoint"><strong>/test-location-attachment</strong> - Test location coordinate extraction</div>
