@@ -1517,12 +1517,12 @@ app.get('/', (req, res) => {
                 </div>
                 
                 <div>
-                    <h3>?? GPS LOCATION SERVICES:</h3>
-                    <div class="feature">? WhatsApp location capture</div>
-                    <div class="feature">? Service area validation</div>
+                    <h3>?? FLEXIBLE LOCATION SERVICES:</h3>
+                    <div class="feature">? WhatsApp GPS location capture</div>
+                    <div class="feature">? Manual address input option</div>
+                    <div class="feature">? Service area validation (both methods)</div>
                     <div class="feature">? Coordinate storage in ERPNext</div>
-                    <div class="feature">? Distance calculations</div>
-                    <div class="feature">? Location-based delivery</div>
+                    <div class="feature">? Distance calculations & delivery optimization</div>
                 </div>
             </div>
 
@@ -1534,28 +1534,26 @@ app.get('/', (req, res) => {
             <div class="endpoint">"need pump" ? Hand Pump</div>
             <div class="endpoint">"bulk pack" ? 100+40 Coupon</div>
             
-            <h3>?? LOCATION FEATURES:</h3>
-            <div class="endpoint">Share location ? GPS validation & storage</div>
-            <div class="endpoint">Service area check ? Dubai/Sharjah/Ajman</div>
-            <div class="endpoint">Coordinate display ? Lat/Long shown</div>
-            <div class="endpoint">ERPNext integration ? custom_latitude, custom_longitude</div>
+            <h3>?? LOCATION OPTIONS:</h3>
+            <div class="endpoint"><strong>GPS Location:</strong> Share location ? Instant GPS validation & coordinate storage</div>
+            <div class="endpoint"><strong>Manual Address:</strong> Type address ? Area validation & address storage</div>
+            <div class="endpoint"><strong>Service Areas:</strong> Dubai (50km), Sharjah (30km), Ajman (25km)</div>
+            <div class="endpoint"><strong>Smart Detection:</strong> Automatically recognizes address format</div>
 
             <h3>?? TEST ENDPOINTS:</h3>
             <div class="endpoint"><strong>/test-smart-match</strong> - Test smart order recognition</div>
             <div class="endpoint"><strong>/test-location</strong> - Test GPS validation</div>
+            <div class="endpoint"><strong>/test-manual-address</strong> - Test manual address validation</div>
             <div class="endpoint"><strong>/test-gpt</strong> - Test GPT integration</div>
             <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
             <div class="endpoint"><strong>/analytics</strong> - Enhanced session analytics</div>
             
-            <h3>?? ERPNEXT CUSTOM FIELDS USED:</h3>
-            <div class="endpoint">custom_latitude - GPS latitude coordinate</div>
-            <div class="endpoint">custom_longitude - GPS longitude coordinate</div>
-            <div class="endpoint">custom_location_name - Location name/description</div>
-            <div class="endpoint">custom_location_address - Address from GPS</div>
-            <div class="endpoint">custom_location_updated - Last location update timestamp</div>
-            <div class="endpoint">custom_delivery_latitude - Order delivery latitude</div>
-            <div class="endpoint">custom_delivery_longitude - Order delivery longitude</div>
-            <div class="endpoint">custom_delivery_location_name - Order delivery location name</div>
+            <h3>?? ERPNEXT CUSTOM FIELDS:</h3>
+            <div class="endpoint"><strong>GPS Fields:</strong> custom_latitude, custom_longitude, custom_location_name</div>
+            <div class="endpoint"><strong>Manual Address Fields:</strong> custom_manual_address, custom_delivery_city</div>
+            <div class="endpoint"><strong>Order Fields:</strong> custom_delivery_method, custom_address_confidence</div>
+            <div class="endpoint"><strong>Validation Fields:</strong> custom_address_type, custom_address_validation</div>
+            <div class="endpoint"><strong>Delivery Fields:</strong> custom_delivery_latitude, custom_delivery_longitude</div>
         </div>
     </body>
     </html>
