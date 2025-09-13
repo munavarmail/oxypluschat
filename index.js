@@ -25,6 +25,44 @@ const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000;
 // Enhanced conversation state management
 const userSessions = new Map();
 
+// Welcome menu options
+const WELCOME_MENU = `WELCOME TO PREMIUM WATER DELIVERY SERVICE!
+
+Choose what you'd like to do:
+
+PLACE ORDER
+Type: "order [product name]"
+Examples:
+• order single bottle
+• order coupon book
+• order premium cooler
+
+VIEW PRICING
+Type: "pricing" or "menu"
+
+DELIVERY INFO
+Type: "delivery" or "schedule"
+
+PAYMENT OPTIONS
+Type: "payment methods"
+
+CUSTOMER SUPPORT
+Type: "support" or "help"
+
+RAISE COMPLAINT
+Type: "complaint" or "issue"
+
+CHECK ACCOUNT
+Send your mobile number
+
+SPECIAL OFFERS
+Type: "offers" or "deals"
+
+COMPANY INFO
+Type: "about us"
+
+Just type what you need or ask me anything!`;
+
 // Product catalog with enhanced descriptions
 const PRODUCTS = {
     'single_bottle': { 
@@ -120,6 +158,9 @@ PRODUCTS AND PRICING:
 7. 100+40 Coupon Book - AED 700 (140 bottles, best value, BNPL available)
 8. Premium Package - AED 920 (140 bottles + premium dispenser)
 
+WELCOME MENU RESPONSES:
+When customers greet with "hi", "hello", "hey", etc., show the complete welcome menu with all available options.
+
 ORDER PROCESS:
 To place an order, customers should:
 1. Type "order [product name]" (e.g., "order single bottle", "order coupon book")
@@ -199,6 +240,9 @@ async function getGPTResponse(userMessage, session, context = '') {
         
         const systemPrompt = `You are an intelligent sales assistant for a premium water delivery service in UAE. 
 
+GREETING HANDLING:
+When customers greet with "hi", "hello", "hey", "good morning", etc., show them the complete welcome menu with all available options.
+
 IMPORTANT ORDER INSTRUCTIONS:
 When customers want to place an order, ALWAYS guide them to use the specific format:
 "To place an order, please type: order [product name]"
@@ -217,15 +261,27 @@ ${KNOWLEDGE_BASE}
 ${context}
 
 CONVERSATION GUIDELINES:
-1. Be helpful, professional, and sales-oriented
-2. Qualify customers by understanding their needs
-3. Recommend appropriate products based on consumption
-4. Guide customers to place orders using "order [product]" format
-5. Handle objections with value propositions
-6. Ask qualifying questions (usage, location, current supplier)
-7. Be conversational and natural
-8. Show clear pricing and benefits
-9. End with call to action
+1. For greetings, show the complete welcome menu with all options
+2. Be helpful, professional, and sales-oriented
+3. Qualify customers by understanding their needs
+4. Recommend appropriate products based on consumption
+5. Guide customers to place orders using "order [product]" format
+6. Handle objections with value propositions
+7. Ask qualifying questions (usage, location, current supplier)
+8. Be conversational and natural
+9. Show clear pricing and benefits
+10. End with call to action
+
+AVAILABLE SERVICES TO MENTION:
+- Order placement
+- Pricing information
+- Delivery details
+- Payment methods
+- Customer support
+- Complaint handling
+- Account lookup
+- Special offers
+- Company information
 
 PRODUCT RECOMMENDATIONS:
 - 1-5 bottles/week: Single bottles or 10+1 coupon book
@@ -330,22 +386,22 @@ What would you like to order?`;
     
     // Pricing questions
     if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('how much') || lowerMessage.includes('pricing') || lowerMessage.includes('menu')) {
-        return `?? COMPLETE PRICING MENU
+        return `COMPLETE PRICING MENU
 
-?? WATER BOTTLES:
+WATER BOTTLES:
 • Single Bottle - AED 7 + AED 15 deposit
 • Trial Bottle - AED 7 + AED 15 deposit
 
-?? COUPON BOOKS (Better Value):
+COUPON BOOKS (Better Value):
 • 10+1 Coupon Book - AED 70 (save on deposit)
 • 100+40 Coupon Book - AED 700 (BNPL available)
 
-?? EQUIPMENT:
+EQUIPMENT:
 • Hand Pump - AED 15
 • Table Dispenser - AED 25
 • Premium Cooler - AED 300 (1-year warranty)
 
-?? PACKAGES:
+PACKAGES:
 • 140 Bottles + Dispenser - AED 920
 
 To order, type: "order [product name]"
@@ -355,18 +411,18 @@ How many bottles do you use per week? I can recommend the best value option.`;
     
     // Delivery questions
     if (lowerMessage.includes('deliver') || lowerMessage.includes('when') || lowerMessage.includes('schedule') || lowerMessage.includes('delivery')) {
-        return `?? DELIVERY INFORMATION
+        return `DELIVERY INFORMATION
 
-?? COVERAGE AREAS:
+COVERAGE AREAS:
 Dubai, Sharjah, Ajman (except freezones)
 
-? DELIVERY OPTIONS:
+DELIVERY OPTIONS:
 • Same-day/next-day delivery available
 • Weekly scheduled delivery setup
 • FREE delivery with coupon books
 • WhatsApp coordination for timing
 
-?? DELIVERY CHARGES:
+DELIVERY CHARGES:
 • FREE with coupon books
 • Standard charges for individual bottles
 
@@ -378,17 +434,17 @@ Which area are you located in?`;
 
     // Payment methods
     if (lowerMessage.includes('payment') || lowerMessage.includes('pay')) {
-        return `?? PAYMENT METHODS
+        return `PAYMENT METHODS
 
 We accept:
 • Cash on delivery
 • Bank transfer
 • Card payment (notify 1 day prior)
 
-?? SPECIAL PAYMENT OPTIONS:
+SPECIAL PAYMENT OPTIONS:
 • Buy Now Pay Later (ONLY for 100+40 Coupon Book)
 
-?? PAYMENT BENEFITS:
+PAYMENT BENEFITS:
 • No payment hassle with coupon books
 • Just exchange coupons for bottles
 • Better prices with advance payment
@@ -398,7 +454,7 @@ Ready to place an order? Type: "order [product name]"`;
 
     // Customer support
     if (lowerMessage.includes('support') || lowerMessage.includes('help') || lowerMessage.includes('contact')) {
-        return `?? CUSTOMER SUPPORT
+        return `CUSTOMER SUPPORT
 
 I'm here to help you with:
 • Product information and recommendations
@@ -407,13 +463,13 @@ I'm here to help you with:
 • Payment assistance
 • Account management
 
-?? NEED SPECIFIC HELP?
+NEED SPECIFIC HELP?
 • Order: "order [product name]"
 • Pricing: "pricing"
 • Delivery: "delivery info"
 • Account: Send your mobile number
 
-?? OTHER CONTACT METHODS:
+OTHER CONTACT METHODS:
 • WhatsApp: You're already here!
 • Phone support available during business hours
 
@@ -422,18 +478,18 @@ What specific help do you need today?`;
 
     // Complaint handling
     if (lowerMessage.includes('complaint') || lowerMessage.includes('issue') || lowerMessage.includes('problem') || lowerMessage.includes('complain')) {
-        return `?? COMPLAINT / ISSUE REPORTING
+        return `COMPLAINT / ISSUE REPORTING
 
 I'm sorry to hear you're experiencing an issue. I'm here to help resolve it quickly.
 
-?? COMMON ISSUES WE CAN HELP WITH:
+COMMON ISSUES WE CAN HELP WITH:
 • Delivery delays or missed deliveries
 • Product quality concerns
 • Billing or payment issues
 • Customer service problems
 • Equipment malfunction
 
-?? TO HELP YOU BETTER:
+TO HELP YOU BETTER:
 Please describe your issue in detail including:
 • Order number (if applicable)
 • Date of incident
@@ -447,23 +503,23 @@ What specific issue would you like to report?`;
 
     // Special offers
     if (lowerMessage.includes('offer') || lowerMessage.includes('deal') || lowerMessage.includes('discount') || lowerMessage.includes('promo')) {
-        return `?? SPECIAL OFFERS & DEALS
+        return `SPECIAL OFFERS & DEALS
 
-?? CURRENT PROMOTIONS:
+CURRENT PROMOTIONS:
 • 10+1 Coupon Book: Get 11 bottles for price of 10!
 • 100+40 Coupon Book: Get 140 bottles (40 FREE!)
 • Buy Now Pay Later on 100+40 package
 
-?? MONEY-SAVING OPTIONS:
+MONEY-SAVING OPTIONS:
 • Coupon books eliminate bottle deposits
 • FREE delivery with coupon purchases
 • Volume discounts for bulk orders
 • No hidden costs - transparent pricing
 
-?? BUSINESS PACKAGES:
+BUSINESS PACKAGES:
 Special rates for offices and commercial customers
 
-?? FIRST-TIME CUSTOMERS:
+FIRST-TIME CUSTOMERS:
 Try our Trial Bottle to experience quality
 
 To take advantage of any offer, type: "order [product name]"
@@ -473,26 +529,26 @@ Which offer interests you most?`;
 
     // Company information
     if (lowerMessage.includes('about') || lowerMessage.includes('company') || lowerMessage.includes('info')) {
-        return `?? ABOUT OUR COMPANY
+        return `ABOUT OUR COMPANY
 
-?? PREMIUM WATER DELIVERY SERVICE
+PREMIUM WATER DELIVERY SERVICE
 • Based in Ajman, UAE
 • 10+ years of trusted service
 • Serving Dubai, Sharjah, Ajman
 
-?? QUALITY COMMITMENT:
+QUALITY COMMITMENT:
 • 100% virgin material bottles
 • Low sodium, pH-balanced water
 • Rigorous quality testing
 • Superior customer service
 
-?? SERVICE EXCELLENCE:
+SERVICE EXCELLENCE:
 • Reliable delivery network
 • Professional delivery team
 • WhatsApp-based coordination
 • Flexible scheduling options
 
-?? WHY CHOOSE US:
+WHY CHOOSE US:
 • Transparent pricing (no hidden costs)
 • Equipment options available
 • Flexible payment methods
@@ -504,20 +560,20 @@ Type: "order [product name]"`;
 
     // Account lookup
     if (lowerMessage.includes('account') || lowerMessage.includes('profile') || lowerMessage.includes('my details')) {
-        return `?? ACCOUNT LOOKUP
+        return `ACCOUNT LOOKUP
 
 To check your account details, please send your mobile number.
 
-?? WHAT YOU'LL SEE:
+WHAT YOU'LL SEE:
 • Customer name and contact info
 • Delivery address on file
 • Order history
 • Account preferences
 
-?? PRIVACY NOTE:
+PRIVACY NOTE:
 Your information is secure and only used for service delivery.
 
-?? NEW CUSTOMER?
+NEW CUSTOMER?
 No account yet? No problem! You can place your first order immediately.
 
 Send your mobile number or type "order [product name]" to get started.`;
@@ -549,12 +605,13 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: process.memoryUsage(),
         environment: process.env.NODE_ENV || 'development',
-        version: '3.1.0-Fixed-Orders',
+        version: '3.2.0-Complete-Menu',
         activeSessions: userSessions.size,
         features: {
             gptIntegration: !!OPENAI_API_KEY,
             erpIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
-            keepAlive: !!KEEP_ALIVE_URL
+            keepAlive: !!KEEP_ALIVE_URL,
+            welcomeMenu: true
         }
     };
     
@@ -1303,7 +1360,7 @@ async function sendMessage(to, message, phoneNumberId) {
 // Test endpoints
 app.get('/test-gpt', async (req, res) => {
     try {
-        const testMessage = "I want to order water for my office";
+        const testMessage = "hi";
         const testSession = createUserSession();
         
         const response = await getGPTResponse(testMessage, testSession);
@@ -1420,7 +1477,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Fixed WhatsApp Water Delivery Bot</title>
+        <title>Complete WhatsApp Water Delivery Bot</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
             .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1436,24 +1493,39 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>FIXED WhatsApp Water Delivery Bot v3.1</h1>
+            <h1>Complete WhatsApp Water Delivery Bot v3.2</h1>
             <div class="status">
-                <h2>Status: <span class="active">ORDERS WORKING</span></h2>
-                <p><strong>Version:</strong> 3.1.0 (Fixed Order Processing + ERPNext)</p>
+                <h2>Status: <span class="active">COMPLETE MENU SYSTEM</span></h2>
+                <p><strong>Version:</strong> 3.2.0 (Complete Welcome Menu + All Services)</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>GPT Integration:</strong> <span class="${OPENAI_API_KEY ? 'active' : 'inactive'}">${OPENAI_API_KEY ? 'ENABLED' : 'DISABLED'}</span></p>
                 <p><strong>ERPNext:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
             
-            <h3>FIXED ISSUES:</h3>
+            <h3>COMPLETE WELCOME MENU SYSTEM:</h3>
             <ul>
-                <li>? Order command detection improved</li>
-                <li>? Product matching logic enhanced</li>
-                <li>? ERPNext integration completed</li>
-                <li>? Order state management fixed</li>
-                <li>? Error handling improved</li>
-                <li>? Logging added for debugging</li>
+                <li>? Order placement with all products</li>
+                <li>? Complete pricing information</li>
+                <li>? Delivery details and scheduling</li>
+                <li>? Payment methods and options</li>
+                <li>? Customer support system</li>
+                <li>? Complaint handling process</li>
+                <li>? Account lookup by mobile</li>
+                <li>? Special offers and deals</li>
+                <li>? Company information</li>
             </ul>
+
+            <h3>GREETING RESPONSES:</h3>
+            <div class="endpoint">hi / hello / hey ? Shows complete welcome menu</div>
+            
+            <h3>SERVICE COMMANDS:</h3>
+            <div class="endpoint">pricing / menu ? Complete price list</div>
+            <div class="endpoint">delivery ? Delivery information</div>
+            <div class="endpoint">payment ? Payment methods</div>
+            <div class="endpoint">support ? Customer support</div>
+            <div class="endpoint">complaint ? Complaint handling</div>
+            <div class="endpoint">offers ? Special deals</div>
+            <div class="endpoint">about us ? Company info</div>
 
             <h3>ORDER COMMANDS:</h3>
             <div class="endpoint">order single bottle</div>
@@ -1466,7 +1538,7 @@ app.get('/', (req, res) => {
             <div class="endpoint">order premium package</div>
             
             <h3>TEST ENDPOINTS:</h3>
-            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT integration</div>
+            <div class="endpoint"><strong>/test-gpt</strong> - Test GPT welcome menu</div>
             <div class="endpoint"><strong>/test-erpnext</strong> - Test ERPNext connection</div>
             <div class="endpoint"><strong>/test-order</strong> - Test order processing (POST)</div>
             <div class="endpoint"><strong>/analytics</strong> - View session analytics</div>
@@ -1478,8 +1550,8 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? FIXED WhatsApp Water Delivery Bot v3.1 running on port ${PORT}`);
-    console.log('? Order processing FIXED + ERPNext integration');
+    console.log(`?? COMPLETE WhatsApp Water Delivery Bot v3.2 running on port ${PORT}`);
+    console.log('? Complete welcome menu system + All services + Order processing');
     console.log(`?? URL: http://localhost:${PORT}`);
     
     if (!OPENAI_API_KEY) {
