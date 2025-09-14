@@ -206,7 +206,7 @@ async function createCustomerInERP(registrationData) {
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: '',
+            territory: 'UAE',
             custom_building_name: registrationData.buildingName,
             custom_area: registrationData.area,
             custom_flat_no: registrationData.flatNo,
@@ -624,6 +624,7 @@ ${MAIN_MENU}`;
             updateData.custom_building_name = messageBody.trim();
             break;
         case 'Area':
+            // Store area without validation
             updateData.custom_area = messageBody.trim();
             break;
         case 'Flat No':
@@ -632,7 +633,9 @@ ${MAIN_MENU}`;
     }
     
     if (currentField === 'GPS Location') {
-        return `?? I need your GPS location. Please share it using the ?? attachment button ? Location.`;
+        return `?? I need your GPS location. Please share it using the ?? attachment button ? Location.
+
+GPS location is only validated through the map attachment - no manual area validation required.`;
     }
     
     // Update customer in ERP
@@ -652,7 +655,9 @@ Next, what's your ${remainingFields[0].toLowerCase()}?`;
 ${MAIN_MENU}`;
         }
     } else {
-        return `? Error updating your information. Please try again.`;
+        return `? Error updating your information. Please try again.
+
+Error: ${updateResult.error}`;
     }
 }
 
