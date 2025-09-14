@@ -1153,7 +1153,7 @@ async function createERPNextCustomer(orderInfo) {
             mobile_no: orderInfo.customerPhone,
             customer_type: 'Individual',
             customer_group: 'Individual', 
-            territory: 'UAE'
+            territory: ''
         };
         
         // Add both GPS and manual address data for new customers
