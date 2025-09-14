@@ -739,12 +739,12 @@ function generateSingleBottleOffer() {
     return { message, buttons };
 }
 
-// Generate order confirmation with buttons
+// Generate order confirmation with buttons (No Area Reference)
 function generateOrderConfirmation(session) {
     const product = session.currentOrder;
     const total = product.price + product.deposit;
     
-    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: ${session.customerInfo?.custom_area || 'Your registered address'}\nPayment: Cash on delivery\n\nConfirm your order?`;
+    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: Your registered address with GPS coordinates\nPayment: Cash on delivery\n\nConfirm your order?`;
     
     const buttons = [
         { id: 'confirm_order', title: 'Confirm Order' },
@@ -829,7 +829,7 @@ async function handleTextMessage(messageBody, session) {
             }
             session.registrationData.buildingName = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_AREA;
-            return { message: "Got it! What area/neighborhood are you in?\n\nJust type any area name ", buttons: null };
+            return { message: "Got it! What area/neighborhood are you in?\n\nJust type any area name - no validation needed!", buttons: null };
             
         case REGISTRATION_STATES.COLLECTING_AREA:
             if (text.length < 2) {
