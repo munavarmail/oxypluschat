@@ -206,7 +206,7 @@ async function createCustomerInERP(registrationData) {
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: 'UAE',
+            territory: '',
             custom_building_name: registrationData.buildingName,
             custom_area: registrationData.area,
             custom_flat_no: registrationData.flatNo,
