@@ -510,7 +510,7 @@ function findNearestCity(latitude, longitude) {
     return nearest;
 }
 
-// Send WhatsApp message with buttons
+// Send WhatsApp message - FIXED VERSION WITH MAX 3 BUTTONS
 async function sendMessage(to, message, phoneNumberId, buttons = null) {
     try {
         let messageData = {
@@ -519,21 +519,48 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
         };
 
         if (buttons && buttons.length > 0) {
-            messageData.type = 'interactive';
-            messageData.interactive = {
-                type: 'button',
-                body: { text: message },
-                action: {
-                    buttons: buttons.map((btn, index) => ({
-                        type: 'reply',
-                        reply: {
-                            id: btn.id || `button_${index}`,
-                            title: btn.title.substring(0, 20)
-                        }
-                    }))
-                }
-            };
+            // Debug logging
+            console.log(`Preparing to send ${buttons.length} buttons to ${to}:`);
+            buttons.forEach((btn, idx) => {
+                console.log(`  Button ${idx + 1}: ID="${btn.id}", Title="${btn.title}" (${btn.title.length} chars)`);
+            });
+
+            // Ensure MAXIMUM 3 buttons and validate each one
+            const validButtons = buttons.slice(0, 3).filter(btn => 
+                btn.id && btn.title && btn.title.trim().length > 0 && btn.title.length <= 20
+            );
+            
+            if (validButtons.length === 0) {
+                console.log('No valid buttons found, sending as text message');
+                messageData.type = 'text';
+                messageData.text = { body: message };
+            } else {
+                console.log(`Sending ${validButtons.length} valid buttons`);
+                messageData.type = 'interactive';
+                messageData.interactive = {
+                    type: 'button',
+                    body: { text: message },
+                    action: {
+                        buttons: validButtons.map((btn, index) => ({
+                            type: 'reply',
+                            reply: {
+                                id: btn.id,
+                                title: btn.title.substring(0, 20).trim()
+                            }
+                        }))
+                    }
+                };
+            }
         } else {
+            console.log('No buttons provided, sending text message');
+            messageData.type = 'text';
+            messageData.text = { body: message };
+        }
+
+        // Final validation check
+        if (messageData.type === 'interactive' && 
+            messageData.interactive.action.buttons.length > 3) {
+            console.log('ERROR: Too many buttons detected, converting to text');
             messageData.type = 'text';
             messageData.text = { body: message };
         }
@@ -551,6 +578,31 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
         console.log('Message sent successfully to:', to);
     } catch (error) {
         console.error('Error sending message:', error.response?.data || error.message);
+        
+        // If button message fails, send as text only
+        if (error.response?.data?.error?.code === 131009) {
+            console.log('Button error detected, sending as text message...');
+            try {
+                await axios.post(
+                    `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+                    {
+                        messaging_product: 'whatsapp',
+                        to: to,
+                        type: 'text',
+                        text: { body: message }
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+                console.log('Text message sent successfully');
+            } catch (retryError) {
+                console.error('Text message retry failed:', retryError.response?.data || retryError.message);
+            }
+        }
     }
 }
 
@@ -624,6 +676,9 @@ async function handleButtonReply(buttonId, session) {
         case 'single_bottle':
             return generateSingleBottleOffer();
             
+        case 'more_options':
+            return generateMoreOptionsMenu();
+            
         case 'check_account':
             return await generateAccountInfo(session);
             
@@ -660,7 +715,7 @@ async function handleButtonReply(buttonId, session) {
     }
 }
 
-// Generate main menu
+// Generate main menu - MAX 3 BUTTONS
 function generateMainMenu(session) {
     const customerName = session.customerInfo?.customer_name || 'valued customer';
     const message = `Welcome back, ${customerName}!\n\nPREMIUM WATER DELIVERY\n\nChoose an option below:`;
@@ -668,21 +723,7 @@ function generateMainMenu(session) {
     const buttons = [
         { id: 'coupon_books', title: 'Coupon Books' },
         { id: 'single_bottle', title: 'Single Bottle' },
-        { id: 'check_account', title: 'My Account' },
-        { id: 'customer_support', title: 'Support' }
-    ];
-    
-    return { message, buttons };
-}
-
-// Generate coupon menu
-function generateCouponMenu() {
-    const message = `COUPON BOOK OPTIONS - SAVE MONEY!\n\n10+1 Coupon Book - AED 70\n• Get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying individually\n• Perfect for families\n\n100+40 Coupon Book - AED 700\n• Get 140 bottles (100 + 40 FREE!)\n• Save AED 280 compared to buying individually\n• Best for offices/large families\n• Buy now, pay later available\n\nWhich coupon book interests you?`;
-    
-    const buttons = [
-        { id: 'coupon_10_1', title: '10+1 Book' },
-        { id: 'coupon_100_40', title: '100+40 Book' },
-        { id: 'back_to_menu', title: 'Back to Menu' }
+        { id: 'more_options', title: 'More Options' }
     ];
     
     return { message, buttons };
@@ -701,7 +742,20 @@ function generateMoreOptionsMenu() {
     return { message, buttons };
 }
 
-// Generate single bottle offer
+// Generate coupon menu - MAX 3 BUTTONS
+function generateCouponMenu() {
+    const message = `COUPON BOOK OPTIONS - SAVE MONEY!\n\n10+1 Coupon Book - AED 70\n• Get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying individually\n• Perfect for families\n\n100+40 Coupon Book - AED 700\n• Get 140 bottles (100 + 40 FREE!)\n• Save AED 280 compared to buying individually\n• Best for offices/large families\n• Buy now, pay later available\n\nWhich coupon book interests you?`;
+    
+    const buttons = [
+        { id: 'coupon_10_1', title: '10+1 Book' },
+        { id: 'coupon_100_40', title: '100+40 Book' },
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate single bottle offer - MAX 3 BUTTONS
 function generateSingleBottleOffer() {
     const message = `Before ordering a single bottle, did you know?\n\nBETTER VALUE: Our 10+1 Coupon Book costs AED 70\n• You get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying single bottles\n• No deposit required per bottle\n\nSingle Bottle: AED 7 + AED 15 deposit = AED 22 total\n\nWould you prefer:`;
     
@@ -714,7 +768,7 @@ function generateSingleBottleOffer() {
     return { message, buttons };
 }
 
-// Generate order confirmation
+// Generate order confirmation - 2 BUTTONS
 function generateOrderConfirmation(session) {
     const product = session.currentOrder;
     const total = product.price + product.deposit;
@@ -729,7 +783,7 @@ function generateOrderConfirmation(session) {
     return { message, buttons };
 }
 
-// Generate support info
+// Generate support info - 1 BUTTON
 function generateSupportInfo() {
     const message = `CUSTOMER SUPPORT\n\nCall us: +971-XX-XXXX-XXX\nWhatsApp: This number\nEmail: support@waterdelivery.com\n\nSupport Hours:\nMonday - Sunday: 8:00 AM - 10:00 PM\n\nHow can we help you today?\n• Delivery questions\n• Product information\n• Account issues\n• Complaints or feedback\n\nJust tell me what you need help with!`;
     
@@ -951,7 +1005,7 @@ async function handleOrderConfirmation(text, session) {
     }
 }
 
-// Generate account info
+// Generate account info - 1 BUTTON
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
     
@@ -1000,7 +1054,7 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '8.0.0-No-Validation-Fields',
+        version: '9.0.0-Final-Fixed-Buttons',
         activeSessions: userSessions.size,
         features: {
             customerRegistration: true,
@@ -1010,7 +1064,8 @@ app.get('/health', (req, res) => {
             erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
             interactiveButtons: true,
             cleanTextFormatting: true,
-            noValidationFields: true
+            noValidationFields: true,
+            maxThreeButtons: true
         }
     });
 });
@@ -1081,7 +1136,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot v8.0</title>
+        <title>WhatsApp Water Delivery Bot v9.0</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1095,27 +1150,31 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v8.0</h1>
+            <h1>WhatsApp Water Delivery Bot v9.0</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">NO VALIDATION FIELDS</span></h2>
-                <p><strong>Version:</strong> 8.0.0-No-Validation-Fields</p>
+                <h2>Status: <span class="active">FINAL FIXED VERSION</span></h2>
+                <p><strong>Version:</strong> 9.0.0-Final-Fixed-Buttons</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>ERPNext Integration:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
 
-            <h3>LINKVALIDATION ERROR FIXES:</h3>
-            <div class="feature">Removed ALL fields that require validation from Customer creation</div>
-            <div class="feature">Address uses only standard, safe fields</div>
-            <div class="feature">Area and building stored as free text in address_line1 and address_line2</div>
-            <div class="feature">GPS coordinates stored safely in custom fields</div>
-            <div class="feature">Only validates GPS coordinates for service area</div>
+            <h3>WHATSAPP BUTTON FIXES:</h3>
+            <div class="feature">Maximum 3 buttons per message (WhatsApp API limit)</div>
+            <div class="feature">Main menu restructured with "More Options" submenu</div>
+            <div class="feature">Enhanced button validation and error handling</div>
+            <div class="feature">Automatic fallback to text messages if buttons fail</div>
+            <div class="feature">Detailed button debugging and logging</div>
 
-            <h3>SAFE ERPNEXT INTEGRATION:</h3>
-            <div class="feature"><strong>Customer Creation:</strong> Only guaranteed safe fields</div>
-            <div class="feature"><strong>Address Creation:</strong> Standard Address doctype fields only</div>
-            <div class="feature"><strong>No Link Validation:</strong> All text fields are free form</div>
-            <div class="feature"><strong>GPS Storage:</strong> Safe custom latitude/longitude fields</div>
+            <h3>BUTTON STRUCTURE:</h3>
+            <div class="feature"><strong>Main Menu:</strong> Coupon Books, Single Bottle, More Options</div>
+            <div class="feature"><strong>More Options:</strong> My Account, Support, Back to Menu</div>
+            <div class="feature"><strong>All Menus:</strong> Maximum 3 buttons each</div>
+
+            <h3>ERPNEXT INTEGRATION:</h3>
+            <div class="feature"><strong>No Validation Errors:</strong> Removed all Link field dependencies</div>
+            <div class="feature"><strong>Safe Customer Creation:</strong> Only guaranteed safe fields</div>
+            <div class="feature"><strong>GPS-Only Validation:</strong> Service area check by coordinates</div>
         </div>
     </body>
     </html>
@@ -1124,10 +1183,10 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`WhatsApp Water Delivery Bot v8.0 running on port ${PORT}`);
-    console.log('CRITICAL FIX: Removed all validation-causing fields');
-    console.log('Address storage: Free text in address_line1/address_line2');
-    console.log('GPS validation: Only coordinates checked for service area');
+    console.log(`WhatsApp Water Delivery Bot v9.0 running on port ${PORT}`);
+    console.log('FIXED: Maximum 3 buttons per WhatsApp message');
+    console.log('FIXED: No ERPNext validation field errors');
+    console.log('FIXED: Enhanced error handling and debugging');
     
     if (!ERPNEXT_URL) {
         console.warn('Warning: ERPNEXT_URL not configured');

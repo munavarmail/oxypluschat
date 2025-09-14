@@ -688,6 +688,19 @@ function generateCouponMenu() {
     return { message, buttons };
 }
 
+// Generate more options menu
+function generateMoreOptionsMenu() {
+    const message = `MORE OPTIONS\n\nWhat would you like to do?`;
+    
+    const buttons = [
+        { id: 'check_account', title: 'My Account' },
+        { id: 'customer_support', title: 'Support' },
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
+}
+
 // Generate single bottle offer
 function generateSingleBottleOffer() {
     const message = `Before ordering a single bottle, did you know?\n\nBETTER VALUE: Our 10+1 Coupon Book costs AED 70\n• You get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying single bottles\n• No deposit required per bottle\n\nSingle Bottle: AED 7 + AED 15 deposit = AED 22 total\n\nWould you prefer:`;
