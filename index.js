@@ -64,14 +64,14 @@ const PRODUCTS = {
 };
 
 // Welcome message for new users
-const WELCOME_MESSAGE = `?? WELCOME TO PREMIUM WATER DELIVERY!
+const WELCOME_MESSAGE = `WELCOME TO PREMIUM WATER DELIVERY!
 
 Hi! I'm your personal water delivery assistant.
 
 To get started, I need to set up your delivery profile. This is a one-time setup that will make future orders super quick!
 
 Please provide your details:
-?? What's your name?`;
+What's your name?`;
 
 // Customer registration flow states
 const REGISTRATION_STATES = {
@@ -82,38 +82,6 @@ const REGISTRATION_STATES = {
     COLLECTING_LOCATION: 'collecting_location',
     REGISTRATION_COMPLETE: 'registration_complete'
 };
-
-// Main menu for registered customers
-const MAIN_MENU = `?? PREMIUM WATER DELIVERY
-
-Choose an option:
-
-1?? *Get a coupon book* (BEST VALUE - Save money!)
-2?? *Order a bottle* (Single bottle)
-3?? *Check my account* (View your details)
-4?? *Customer support* (Get help)
-
-?? *RECOMMENDED:* Coupon books save you money and delivery fees!
-
-Just type the number (1, 2, 3, or 4) or tell me what you want.`;
-
-// Coupon book promotion menu
-const COUPON_MENU = `?? COUPON BOOK OPTIONS - SAVE MONEY!
-
-?? *Option 1: 10+1 Coupon Book* - AED 70
-• Get 11 bottles (10 + 1 FREE)
-• Save AED 7 compared to buying individually
-• Perfect for families
-
-?? *Option 2: 100+40 Coupon Book* - AED 700  
-• Get 140 bottles (100 + 40 FREE!)
-• Save AED 280 compared to buying individually
-• Best for offices/large families
-• Buy now, pay later available
-
-Which coupon book interests you?
-Type *1* for 10+1 or *2* for 100+40
-Or type *back* to see other options.`;
 
 // Create user session
 function createUserSession(phoneNumber) {
@@ -149,9 +117,9 @@ async function checkExistingCustomer(phoneNumber) {
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', phoneNumber]]),
-                // Only query standard fields that are guaranteed to exist
                 fields: JSON.stringify([
-                    'name', 'customer_name', 'mobile_no', 'creation'
+                    'name', 'customer_name', 'mobile_no', 'creation', 
+                    'custom_area', 'custom_building_no', 'custom_whatsapp_number'
                 ])
             }
         });
@@ -196,10 +164,12 @@ async function getCustomerDetails(customerName) {
     }
 }
 
-// Find missing required fields - SIMPLIFIED VERSION
+// Find missing required fields - UPDATED VERSION
 function findMissingFields(customerData) {
     const requiredFields = [
-        { key: 'customer_name', name: 'Customer Name' }
+        { key: 'customer_name', name: 'Customer Name' },
+        { key: 'custom_area', name: 'Area' },
+        { key: 'custom_building_no', name: 'Building' }
     ];
     
     const missing = [];
@@ -223,21 +193,39 @@ async function createCustomerInERP(registrationData) {
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: ''
+            territory: '', // Left blank as requested
+            
+            // Use custom fields that exist in your system
+            custom_area: registrationData.area || '',
+            custom_building_no: registrationData.buildingName || '',
+            custom_whatsapp_number: registrationData.phoneNumber,
+            
+            // Set default values for other fields
+            default_price_list: 'Price 5',
+            custom_payment_mode: 'Cash',
+            custom_coupon_bottle: 0,
+            
+            // Set delivery days (default to Tuesday)
+            custom_saturday: 0,
+            custom_sunday: 0,
+            custom_monday: 0,
+            custom_tuesday: 1,
+            custom_wednesday: 0,
+            custom_thursday: 0,
+            custom_friday: 0
         };
         
-        // Only add custom fields if they exist in the system
-        // Store address information in standard fields
-        if (registrationData.buildingName || registrationData.area || registrationData.flatNo) {
-            const addressLine = [
-                registrationData.flatNo,
-                registrationData.buildingName,
-                registrationData.area
-            ].filter(Boolean).join(', ');
-            
-            // Use standard address field instead of custom fields
-            customerData.customer_primary_address = addressLine;
+        // Determine customer group based on building type if possible
+        if (registrationData.buildingName) {
+            const buildingLower = registrationData.buildingName.toLowerCase();
+            if (buildingLower.includes('villa')) {
+                customerData.customer_group = 'VILLA';
+            } else if (buildingLower.includes('apartment') || buildingLower.includes('flat')) {
+                customerData.customer_group = 'APARTMENT';
+            }
         }
+        
+        console.log('Creating customer with data:', customerData);
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Customer`,
@@ -254,6 +242,9 @@ async function createCustomerInERP(registrationData) {
         if (registrationData.latitude && registrationData.longitude) {
             await createAddressRecord(response.data.data.name, registrationData);
         }
+        
+        // Create contact record
+        await createContactRecord(response.data.data.name, registrationData);
         
         return {
             success: true,
@@ -275,11 +266,12 @@ async function createAddressRecord(customerName, registrationData) {
     try {
         const addressData = {
             doctype: 'Address',
-            address_title: customerName,
+            address_title: `${customerName} - Delivery Address`,
             address_type: 'Billing',
             address_line1: registrationData.buildingName || '',
-            address_line2: registrationData.flatNo || '',
+            address_line2: `Flat ${registrationData.flatNo || ''}`,
             city: registrationData.area || '',
+            state: 'Dubai',
             country: 'United Arab Emirates',
             links: [{
                 link_doctype: 'Customer',
@@ -305,10 +297,106 @@ async function createAddressRecord(customerName, registrationData) {
         );
         
         console.log('Address created successfully:', response.data.data.name);
+        
+        // Update the customer to link this address as primary address
+        await updateCustomerPrimaryAddress(customerName, response.data.data.name);
+        
         return response.data.data;
         
     } catch (error) {
         console.error('Error creating address:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+// Create contact record
+async function createContactRecord(customerName, registrationData) {
+    try {
+        const contactData = {
+            doctype: 'Contact',
+            first_name: registrationData.name.split(' ')[0] || registrationData.name,
+            last_name: registrationData.name.split(' ').slice(1).join(' ') || '',
+            mobile_no: registrationData.phoneNumber,
+            links: [{
+                link_doctype: 'Customer',
+                link_name: customerName
+            }]
+        };
+        
+        const response = await axios.post(
+            `${ERPNEXT_URL}/api/resource/Contact`,
+            contactData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Contact created successfully:', response.data.data.name);
+        
+        // Update customer to link this contact as primary contact
+        await updateCustomerPrimaryContact(customerName, response.data.data.name);
+        
+        return response.data.data;
+        
+    } catch (error) {
+        console.error('Error creating contact:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+// Update customer with primary address link
+async function updateCustomerPrimaryAddress(customerName, addressName) {
+    try {
+        const updateData = {
+            customer_primary_address: addressName
+        };
+        
+        const response = await axios.put(
+            `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Customer primary address updated successfully');
+        return response.data.data;
+        
+    } catch (error) {
+        console.error('Error updating customer primary address:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+// Update customer with primary contact link
+async function updateCustomerPrimaryContact(customerName, contactName) {
+    try {
+        const updateData = {
+            customer_primary_contact: contactName
+        };
+        
+        const response = await axios.put(
+            `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Customer primary contact updated successfully');
+        return response.data.data;
+        
+    } catch (error) {
+        console.error('Error updating customer primary contact:', error.response?.data || error.message);
         return null;
     }
 }
@@ -455,19 +543,77 @@ function findNearestCity(latitude, longitude) {
     return nearest;
 }
 
+// Send WhatsApp message with buttons
+async function sendMessage(to, message, phoneNumberId, buttons = null) {
+    try {
+        let messageData = {
+            messaging_product: 'whatsapp',
+            to: to
+        };
+
+        if (buttons && buttons.length > 0) {
+            messageData.type = 'interactive';
+            messageData.interactive = {
+                type: 'button',
+                body: {
+                    text: message
+                },
+                action: {
+                    buttons: buttons.map((btn, index) => ({
+                        type: 'reply',
+                        reply: {
+                            id: btn.id || `button_${index}`,
+                            title: btn.title.substring(0, 20) // WhatsApp button title limit
+                        }
+                    }))
+                }
+            };
+        } else {
+            messageData.type = 'text';
+            messageData.text = { body: message };
+        }
+
+        await axios.post(
+            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+            messageData,
+            {
+                headers: {
+                    'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log('Message sent successfully to:', to);
+    } catch (error) {
+        console.error('Error sending message:', error.response?.data || error.message);
+    }
+}
+
 // Main message handler
 async function handleIncomingMessage(message, phoneNumberId) {
     const phoneNumber = message.from;
     const messageBody = message.text?.body;
     const location = message.location;
+    const buttonReply = message.interactive?.button_reply?.id;
     
-    console.log(`Message from ${phoneNumber}:`, { text: messageBody, hasLocation: !!location });
+    console.log(`Message from ${phoneNumber}:`, { 
+        text: messageBody, 
+        hasLocation: !!location,
+        buttonReply: buttonReply
+    });
     
     const session = getSession(phoneNumber);
     let response = '';
+    let buttons = null;
     
+    // Handle button replies first
+    if (buttonReply) {
+        const result = await handleButtonReply(buttonReply, session);
+        response = result.message;
+        buttons = result.buttons;
+    }
     // Check if customer exists first
-    if (session.state === 'new_user') {
+    else if (session.state === 'new_user') {
         const customerCheck = await checkExistingCustomer(phoneNumber);
         
         if (customerCheck.exists) {
@@ -476,15 +622,13 @@ async function handleIncomingMessage(message, phoneNumberId) {
             if (customerCheck.missingFields.length > 0) {
                 // Existing customer with missing information
                 session.state = 'updating_missing_info';
-                response = `Welcome back!
-
-I notice your name is missing from your account. What's your full name?`;
+                response = `Welcome back!\n\nI notice your name is missing from your account. What's your full name?`;
             } else {
                 // Complete existing customer
                 session.state = 'registered';
-                response = `Welcome back, ${customerCheck.customerData.customer_name || 'valued customer'}! ??
-
-${MAIN_MENU}`;
+                const result = generateMainMenu(session);
+                response = result.message;
+                buttons = result.buttons;
             }
         } else {
             // New customer - start registration
@@ -494,14 +638,131 @@ ${MAIN_MENU}`;
     }
     // Handle location messages
     else if (location) {
-        response = await handleLocationMessage(message, session);
+        const result = await handleLocationMessage(message, session);
+        response = result.message;
+        buttons = result.buttons;
     }
     // Handle text messages based on current state
     else if (messageBody) {
-        response = await handleTextMessage(messageBody, session);
+        const result = await handleTextMessage(messageBody, session);
+        response = result.message;
+        buttons = result.buttons;
     }
     
-    await sendMessage(phoneNumber, response, phoneNumberId);
+    await sendMessage(phoneNumber, response, phoneNumberId, buttons);
+}
+
+// Handle button replies
+async function handleButtonReply(buttonId, session) {
+    switch (buttonId) {
+        case 'coupon_books':
+            session.state = 'ordering_coupon';
+            return generateCouponMenu();
+            
+        case 'single_bottle':
+            return generateSingleBottleOffer();
+            
+        case 'check_account':
+            return await generateAccountInfo(session);
+            
+        case 'customer_support':
+            return generateSupportInfo();
+            
+        case 'coupon_10_1':
+            session.currentOrder = PRODUCTS.coupon_10_1;
+            session.state = 'confirming_order';
+            return generateOrderConfirmation(session);
+            
+        case 'coupon_100_40':
+            session.currentOrder = PRODUCTS.coupon_100_40;
+            session.state = 'confirming_order';
+            return generateOrderConfirmation(session);
+            
+        case 'back_to_menu':
+            session.state = 'registered';
+            return generateMainMenu(session);
+            
+        case 'confirm_order':
+            return await handleOrderConfirmation('yes', session);
+            
+        case 'cancel_order':
+            return await handleOrderConfirmation('no', session);
+            
+        case 'order_single':
+            session.currentOrder = PRODUCTS.single_bottle;
+            session.state = 'confirming_order';
+            return generateOrderConfirmation(session);
+            
+        default:
+            return { message: "I didn't understand that selection. Please try again.", buttons: null };
+    }
+}
+
+// Generate main menu with buttons
+function generateMainMenu(session) {
+    const customerName = session.customerInfo?.customer_name || 'valued customer';
+    const message = `Welcome back, ${customerName}!\n\nPREMIUM WATER DELIVERY\n\nChoose an option below:`;
+    
+    const buttons = [
+        { id: 'coupon_books', title: 'Coupon Books' },
+        { id: 'single_bottle', title: 'Single Bottle' },
+        { id: 'check_account', title: 'My Account' },
+        { id: 'customer_support', title: 'Support' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate coupon menu with buttons
+function generateCouponMenu() {
+    const message = `COUPON BOOK OPTIONS - SAVE MONEY!\n\n10+1 Coupon Book - AED 70\n• Get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying individually\n• Perfect for families\n\n100+40 Coupon Book - AED 700\n• Get 140 bottles (100 + 40 FREE!)\n• Save AED 280 compared to buying individually\n• Best for offices/large families\n• Buy now, pay later available\n\nWhich coupon book interests you?`;
+    
+    const buttons = [
+        { id: 'coupon_10_1', title: '10+1 Book' },
+        { id: 'coupon_100_40', title: '100+40 Book' },
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate single bottle offer with buttons
+function generateSingleBottleOffer() {
+    const message = `Before ordering a single bottle, did you know?\n\nBETTER VALUE: Our 10+1 Coupon Book costs AED 70\n• You get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying single bottles\n• No deposit required per bottle\n\nSingle Bottle: AED 7 + AED 15 deposit = AED 22 total\n\nWould you prefer:`;
+    
+    const buttons = [
+        { id: 'coupon_10_1', title: 'Coupon Book' },
+        { id: 'order_single', title: 'Single Bottle' },
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate order confirmation with buttons
+function generateOrderConfirmation(session) {
+    const product = session.currentOrder;
+    const total = product.price + product.deposit;
+    
+    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: ${session.customerInfo?.custom_area || 'Your registered address'}\nPayment: Cash on delivery\n\nConfirm your order?`;
+    
+    const buttons = [
+        { id: 'confirm_order', title: 'Confirm Order' },
+        { id: 'cancel_order', title: 'Cancel Order' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate support information
+function generateSupportInfo() {
+    const message = `CUSTOMER SUPPORT\n\nCall us: +971-XX-XXXX-XXX\nWhatsApp: This number\nEmail: support@waterdelivery.com\n\nSupport Hours:\nMonday - Sunday: 8:00 AM - 10:00 PM\n\nHow can we help you today?\n• Delivery questions\n• Product information\n• Account issues\n• Complaints or feedback\n\nJust tell me what you need help with!`;
+    
+    const buttons = [
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
 }
 
 // Handle location messages
@@ -509,18 +770,19 @@ async function handleLocationMessage(message, session) {
     const locationData = extractLocationCoordinates(message);
     
     if (!locationData) {
-        return 'Sorry, I could not extract your location. Please try sharing your location again using the ?? attachment button.';
+        return { 
+            message: 'Sorry, I could not extract your location. Please try sharing your location again using the attachment button.',
+            buttons: null
+        };
     }
     
     const validation = validateServiceArea(locationData.latitude, locationData.longitude);
     
     if (!validation.isValid) {
-        return `?? Location received but outside our service area!
-
-?? Your location is outside Dubai, Sharjah, or Ajman
-?? Nearest service area: ${validation.nearestCity?.city} (${validation.nearestCity?.distance.toFixed(1)} km away)
-
-We currently serve Dubai, Sharjah, and Ajman. We're expanding soon!`;
+        return {
+            message: `Location received but outside our service area!\n\nYour location is outside Dubai, Sharjah, or Ajman\nNearest service area: ${validation.nearestCity?.city} (${validation.nearestCity?.distance.toFixed(1)} km away)\n\nWe currently serve Dubai, Sharjah, and Ajman. We're expanding soon!`,
+            buttons: null
+        };
     }
     
     // Store location data
@@ -535,18 +797,16 @@ We currently serve Dubai, Sharjah, and Ajman. We're expanding soon!`;
         session.state = 'registered';
         session.customerInfo = customerResult.data;
         
-        return `? Registration Complete!
-
-?? Location confirmed: ${validation.city.toUpperCase()}
-?? Customer profile created successfully!
-
-${MAIN_MENU}`;
+        const mainMenu = generateMainMenu(session);
+        return {
+            message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nCustomer profile created successfully!\n\n${mainMenu.message}`,
+            buttons: mainMenu.buttons
+        };
     } else {
-        return `? Registration Error
-
-There was an issue creating your profile. Please try again or contact support.
-
-Error: ${customerResult.error}`;
+        return {
+            message: `Registration Error\n\nThere was an issue creating your profile. Please try again or contact support.\n\nError: ${customerResult.error}`,
+            buttons: null
+        };
     }
 }
 
@@ -557,45 +817,38 @@ async function handleTextMessage(messageBody, session) {
     switch (session.state) {
         case REGISTRATION_STATES.COLLECTING_NAME:
             if (text.length < 2) {
-                return "Please provide your full name (at least 2 characters).";
+                return { message: "Please provide your full name (at least 2 characters).", buttons: null };
             }
             session.registrationData.name = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_BUILDING;
-            return "?? Thanks! Now, what's your building name or number?";
+            return { message: "Thanks! Now, what's your building name or number?", buttons: null };
             
         case REGISTRATION_STATES.COLLECTING_BUILDING:
             if (text.length < 1) {
-                return "Please provide your building name or number.";
+                return { message: "Please provide your building name or number.", buttons: null };
             }
             session.registrationData.buildingName = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_AREA;
-            return "??? Got it! What area/neighborhood are you in?\n\n?? Just type any area name - no validation needed!";
+            return { message: "Got it! What area/neighborhood are you in?\n\nJust type any area name - no validation needed!", buttons: null };
             
         case REGISTRATION_STATES.COLLECTING_AREA:
             if (text.length < 2) {
-                return "Please provide your area or neighborhood name.";
+                return { message: "Please provide your area or neighborhood name.", buttons: null };
             }
-            // NO AREA VALIDATION - Just store whatever they type
             session.registrationData.area = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_FLAT;
-            return "?? Perfect! What's your flat/apartment number?";
+            return { message: "Perfect! What's your flat/apartment number?", buttons: null };
             
         case REGISTRATION_STATES.COLLECTING_FLAT:
             if (text.length < 1) {
-                return "Please provide your flat or apartment number.";
+                return { message: "Please provide your flat or apartment number.", buttons: null };
             }
             session.registrationData.flatNo = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_LOCATION;
-            return `?? Almost done! Now I need your GPS location for accurate delivery.
-
-Please tap the ?? attachment button ? Location ? Share your current location.
-
-This helps us:
-? Find you easily during delivery
-? Validate service area (Dubai, Sharjah, Ajman only)
-? Optimize our delivery routes
-
-Please share your location now.`;
+            return { 
+                message: `Almost done! Now I need your GPS location for accurate delivery.\n\nPlease tap the attachment button ? Location ? Share your current location.\n\nThis helps us:\n• Find you easily during delivery\n• Validate service area (Dubai, Sharjah, Ajman only)\n• Optimize our delivery routes\n\nPlease share your location now.`,
+                buttons: null
+            };
             
         case 'registered':
             return await handleRegisteredCustomerMessage(text, session);
@@ -610,7 +863,7 @@ Please share your location now.`;
             return await handleOrderConfirmation(text, session);
             
         default:
-            return "I didn't understand that. Please try again.";
+            return { message: "I didn't understand that. Please try again.", buttons: null };
     }
 }
 
@@ -618,26 +871,11 @@ Please share your location now.`;
 async function handleRegisteredCustomerMessage(text, session) {
     if (text.includes('1') || text.includes('coupon') || text.includes('book')) {
         session.state = 'ordering_coupon';
-        return COUPON_MENU;
+        return generateCouponMenu();
     }
     
     if (text.includes('2') || text.includes('bottle') || text.includes('single')) {
-        // Offer coupon first, then single bottle
-        return `?? Before ordering a single bottle, did you know?
-
-?? *BETTER VALUE:* Our 10+1 Coupon Book costs AED 70
-• You get 11 bottles (10 + 1 FREE)
-• Save AED 7 compared to buying single bottles
-• No deposit required per bottle
-
-?? *Single Bottle:* AED 7 + AED 15 deposit = AED 22 total
-
-Would you prefer:
-*A* - 10+1 Coupon Book (Better value!)
-*B* - Single Bottle
-*C* - Back to main menu
-
-Type A, B, or C`;
+        return generateSingleBottleOffer();
     }
     
     if (text.includes('3') || text.includes('account') || text.includes('check')) {
@@ -645,31 +883,14 @@ Type A, B, or C`;
     }
     
     if (text.includes('4') || text.includes('support') || text.includes('help')) {
-        return `?? CUSTOMER SUPPORT
-
-?? Call us: +971-XX-XXXX-XXX
-?? WhatsApp: This number
-?? Email: support@waterdelivery.com
-
-?? Support Hours:
-Monday - Sunday: 8:00 AM - 10:00 PM
-
-How can we help you today?
-• Delivery questions
-• Product information
-• Account issues
-• Complaints or feedback
-
-Just tell me what you need help with!`;
+        return generateSupportInfo();
     }
     
     // If not clear, show menu again
-    return `I didn't understand that. Here are your options:
-
-${MAIN_MENU}`;
+    return generateMainMenu(session);
 }
 
-// Handle missing information updates - SIMPLIFIED
+// Handle missing information updates
 async function handleMissingInfoUpdate(messageBody, session) {
     const updateData = {
         customer_name: messageBody.trim()
@@ -681,13 +902,16 @@ async function handleMissingInfoUpdate(messageBody, session) {
     if (updateResult.success) {
         session.state = 'registered';
         session.customerInfo.customer_name = messageBody.trim();
-        return `? Your name has been updated!
-
-${MAIN_MENU}`;
+        const mainMenu = generateMainMenu(session);
+        return {
+            message: `Your name has been updated!\n\n${mainMenu.message}`,
+            buttons: mainMenu.buttons
+        };
     } else {
-        return `? Error updating your information. Please try again.
-
-Error: ${updateResult.error}`;
+        return {
+            message: `Error updating your information. Please try again.\n\nError: ${updateResult.error}`,
+            buttons: null
+        };
     }
 }
 
@@ -701,34 +925,19 @@ async function handleCouponOrder(text, session) {
         selectedProduct = PRODUCTS.coupon_100_40;
     } else if (text.includes('back')) {
         session.state = 'registered';
-        return MAIN_MENU;
+        return generateMainMenu(session);
     } else {
-        return `Please select an option:
-*1* for 10+1 Coupon Book
-*2* for 100+40 Coupon Book
-*back* for main menu`;
+        const couponMenu = generateCouponMenu();
+        return {
+            message: `Please select an option:\n\n${couponMenu.message}`,
+            buttons: couponMenu.buttons
+        };
     }
     
     session.currentOrder = selectedProduct;
     session.state = 'confirming_order';
     
-    const total = selectedProduct.price + selectedProduct.deposit;
-    
-    return `?? ORDER CONFIRMATION
-
-?? Product: ${selectedProduct.name}
-?? Description: ${selectedProduct.description}
-?? Price: AED ${selectedProduct.price}
-${selectedProduct.deposit > 0 ? `?? Deposit: AED ${selectedProduct.deposit}` : ''}
-?? TOTAL: AED ${total}
-
-? Benefits:
-${selectedProduct.salesPoints.map(point => `• ${point}`).join('\n')}
-
-?? Delivery to: ${session.customerInfo.customer_primary_address || 'Your registered address'}
-?? Payment: Cash on delivery
-
-Reply *YES* to confirm or *NO* to cancel.`;
+    return generateOrderConfirmation(session);
 }
 
 // Handle order confirmations
@@ -746,73 +955,45 @@ async function handleOrderConfirmation(text, session) {
             const currentOrder = session.currentOrder;
             session.currentOrder = null;
             
-            return `?? ORDER CONFIRMED!
-
-?? Order Number: ${orderResult.orderName}
-?? Product: ${currentOrder.name}
-?? Total: AED ${currentOrder.price + currentOrder.deposit}
-
-?? NEXT STEPS:
-• Our delivery team will call you within 2 hours
-• Delivery within 24 hours
-• Payment on delivery (Cash/Card)
-
-Thank you for choosing our premium water service! ??
-
-${MAIN_MENU}`;
+            const mainMenu = generateMainMenu(session);
+            return {
+                message: `ORDER CONFIRMED!\n\nOrder Number: ${orderResult.orderName}\nProduct: ${currentOrder.name}\nTotal: AED ${currentOrder.price + currentOrder.deposit}\n\nNEXT STEPS:\n• Our delivery team will call you within 2 hours\n• Delivery within 24 hours\n• Payment on delivery (Cash/Card)\n\nThank you for choosing our premium water service!\n\n${mainMenu.message}`,
+                buttons: mainMenu.buttons
+            };
         } else {
-            return `? Order processing failed. Please try again or contact support.
-            
-Error: ${orderResult.error}`;
+            return {
+                message: `Order processing failed. Please try again or contact support.\n\nError: ${orderResult.error}`,
+                buttons: null
+            };
         }
     } else if (text.includes('no') || text.includes('cancel')) {
         session.state = 'registered';
         session.currentOrder = null;
-        return `Order cancelled. No problem!
-
-${MAIN_MENU}`;
+        const mainMenu = generateMainMenu(session);
+        return {
+            message: `Order cancelled. No problem!\n\n${mainMenu.message}`,
+            buttons: mainMenu.buttons
+        };
     } else {
-        return `Please reply *YES* to confirm your order or *NO* to cancel.`;
+        const confirmation = generateOrderConfirmation(session);
+        return {
+            message: `Please use the buttons to confirm or cancel your order.\n\n${confirmation.message}`,
+            buttons: confirmation.buttons
+        };
     }
 }
 
-// Generate account information - SIMPLIFIED
+// Generate account information
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
     
-    return `?? YOUR ACCOUNT DETAILS
-
-?? Phone: ${customer.mobile_no}
-?? Name: ${customer.customer_name || 'Not provided'}
-?? Address: ${customer.customer_primary_address || 'Not provided'}
-?? Member Since: ${new Date(customer.creation).toLocaleDateString()}
-
-Need to update any information? Just let me know!
-
-${MAIN_MENU}`;
-}
-
-// Send WhatsApp message
-async function sendMessage(to, message, phoneNumberId) {
-    try {
-        await axios.post(
-            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
-            {
-                messaging_product: 'whatsapp',
-                to: to,
-                text: { body: message }
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        console.log('Message sent successfully to:', to);
-    } catch (error) {
-        console.error('Error sending message:', error.response?.data || error.message);
-    }
+    const message = `YOUR ACCOUNT DETAILS\n\nPhone: ${customer.mobile_no}\nName: ${customer.customer_name || 'Not provided'}\nArea: ${customer.custom_area || 'Not provided'}\nBuilding: ${customer.custom_building_no || 'Not provided'}\nMember Since: ${new Date(customer.creation).toLocaleDateString()}\n\nNeed to update any information? Just let me know!`;
+    
+    const buttons = [
+        { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
 }
 
 // Keep-alive function
@@ -851,7 +1032,7 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '6.1.0-Fixed-ERPNext-Integration',
+        version: '7.0.0-Clean-UI-With-Buttons',
         activeSessions: userSessions.size,
         features: {
             customerRegistration: true,
@@ -859,7 +1040,9 @@ app.get('/health', (req, res) => {
             automaticAccountDetection: true,
             gpsLocationOnlyValidation: true,
             erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
-            fixedAreaValidation: true
+            interactiveButtons: true,
+            cleanTextFormatting: true,
+            emptyTerritoryField: true
         }
     });
 });
@@ -934,13 +1117,12 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot - Fixed ERPNext Integration</title>
+        <title>WhatsApp Water Delivery Bot v7.0</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
             .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
             .feature { margin: 15px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #28a745; }
-            .fix { margin: 10px 0; padding: 12px; background: #d1ecf1; border-radius: 6px; border-left: 4px solid #17a2b8; }
             .active { color: #28a745; font-weight: bold; }
             .inactive { color: #ffc107; }
             h1 { color: #333; text-align: center; }
@@ -949,37 +1131,32 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>?? WhatsApp Water Delivery Bot v6.1</h1>
+            <h1>WhatsApp Water Delivery Bot v7.0</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">FIXED ERPNEXT INTEGRATION</span></h2>
-                <p><strong>Version:</strong> 6.1.0-Fixed-ERPNext-Integration</p>
+                <h2>Status: <span class="active">CLEAN UI WITH INTERACTIVE BUTTONS</span></h2>
+                <p><strong>Version:</strong> 7.0.0-Clean-UI-With-Buttons</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>ERPNext Integration:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
 
-            <h3>?? BUG FIXES APPLIED:</h3>
-            <div class="fix">? Removed problematic custom field queries (custom_building_name, etc.)</div>
-            <div class="fix">? Removed area validation - only GPS location is validated</div>
-            <div class="fix">? Use standard Customer fields only for queries</div>
-            <div class="fix">? Store address info in customer_primary_address field</div>
-            <div class="fix">? Create separate Address document for GPS coordinates</div>
-            <div class="fix">? Simplified missing field detection</div>
+            <h3>NEW FEATURES:</h3>
+            <div class="feature">Interactive WhatsApp buttons for all major actions</div>
+            <div class="feature">Clean text formatting without emojis or icons</div>
+            <div class="feature">Improved user experience with button-driven navigation</div>
+            <div class="feature">Empty territory field in ERPNext customer creation</div>
+            <div class="feature">Better structured messages and responses</div>
 
-            <h3>?? AREA HANDLING:</h3>
-            <div class="feature">?? Manual area entry: NO validation, just store text</div>
-            <div class="feature">?? GPS location: ONLY validation point for service area</div>
-            <div class="feature">?? Service areas: Dubai, Sharjah, Ajman (GPS radius check)</div>
-
-            <h3>?? ERPNEXT INTEGRATION (FIXED):</h3>
-            <div class="feature"><strong>Customer Creation:</strong> Standard fields only</div>
+            <h3>ERPNEXT INTEGRATION (FIXED):</h3>
+            <div class="feature"><strong>Customer Creation:</strong> Uses custom fields properly</div>
+            <div class="feature"><strong>Territory Field:</strong> Left blank as requested</div>
             <div class="feature"><strong>Address Creation:</strong> Separate document with GPS</div>
-            <div class="feature"><strong>Safe Queries:</strong> Only guaranteed fields</div>
-            <div class="feature"><strong>Error Handling:</strong> Graceful fallbacks</div>
+            <div class="feature"><strong>Contact Creation:</strong> Proper linking to customer</div>
 
-            <h3>?? ANALYTICS:</h3>
-            <div class="feature"><strong>/analytics</strong> - View session statistics</div>
-            <div class="feature"><strong>/health</strong> - System health check</div>
+            <h3>USER INTERFACE:</h3>
+            <div class="feature"><strong>Interactive Buttons:</strong> Main menu, product selection, order confirmation</div>
+            <div class="feature"><strong>Clean Text:</strong> No emojis or special characters</div>
+            <div class="feature"><strong>Better UX:</strong> Reduced typing, faster interactions</div>
         </div>
     </body>
     </html>
@@ -988,14 +1165,12 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? WhatsApp Water Delivery Bot v6.2 running on port ${PORT}`);
-    console.log('?? Single Item Strategy: All orders use "5 Gallon Water" with different quantities');
-    console.log('?? Quantities: 1 (single), 11 (10+1), 140 (100+40)');
-    console.log('?? GPS Validation Only: Area text input has no validation');
-    console.log('? ERPNext Compatible: Uses existing item with detailed descriptions');
+    console.log(`WhatsApp Water Delivery Bot v7.0 running on port ${PORT}`);
+    console.log('Features: Interactive buttons, clean text, empty territory field');
+    console.log('ERPNext integration: Fixed with proper custom fields');
     
     if (!ERPNEXT_URL) {
-        console.warn('??  ERPNEXT_URL not configured');
+        console.warn('Warning: ERPNEXT_URL not configured');
     }
     
     startKeepAlive();

@@ -223,7 +223,7 @@ async function createCustomerInERP(registrationData) {
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: 'UAE'
+            territory: ''
         };
         
         // Only add custom fields if they exist in the system
