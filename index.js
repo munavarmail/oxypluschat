@@ -9,10 +9,6 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// OpenAI Configuration
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
 // ERPNext Configuration
 const ERPNEXT_URL = process.env.ERPNEXT_URL || process.env.DOTORDERS_ERP_URL;
 const ERPNEXT_API_KEY = process.env.ERPNEXT_API_KEY || process.env.DOTORDERS_ERP_API_KEY;
@@ -32,7 +28,7 @@ const SERVICE_AREAS = {
     ajman: { lat: 25.4052, lng: 55.5136, radius: 25 }
 };
 
-// Product catalog with high priority on coupon books
+// Product catalog
 const PRODUCTS = {
     'coupon_10_1': { 
         name: '10+1 Coupon Book', 
@@ -63,7 +59,7 @@ const PRODUCTS = {
     }
 };
 
-// Welcome message for new users
+// Welcome message
 const WELCOME_MESSAGE = `WELCOME TO PREMIUM WATER DELIVERY!
 
 Hi! I'm your personal water delivery assistant.
@@ -73,7 +69,7 @@ To get started, I need to set up your delivery profile. This is a one-time setup
 Please provide your details:
 What's your name?`;
 
-// Customer registration flow states
+// Registration states
 const REGISTRATION_STATES = {
     COLLECTING_NAME: 'collecting_name',
     COLLECTING_BUILDING: 'collecting_building',
@@ -106,7 +102,7 @@ function getSession(phoneNumber) {
     return session;
 }
 
-// Check if customer exists in ERPNext - FIXED VERSION
+// Check if customer exists - SAFE VERSION
 async function checkExistingCustomer(phoneNumber) {
     try {
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
@@ -117,17 +113,12 @@ async function checkExistingCustomer(phoneNumber) {
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', phoneNumber]]),
-                fields: JSON.stringify([
-                    'name', 'customer_name', 'mobile_no', 'creation', 
-                    'custom_area', 'custom_building_no', 'custom_whatsapp_number'
-                ])
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'creation'])
             }
         });
 
         if (response.data.data && response.data.data.length > 0) {
             const customer = response.data.data[0];
-            
-            // Get full customer details in a separate call
             const customerDetails = await getCustomerDetails(customer.name);
             
             return {
@@ -145,7 +136,7 @@ async function checkExistingCustomer(phoneNumber) {
     }
 }
 
-// Get full customer details safely
+// Get customer details safely
 async function getCustomerDetails(customerName) {
     try {
         const response = await axios.get(
@@ -164,15 +155,11 @@ async function getCustomerDetails(customerName) {
     }
 }
 
-// Find missing required fields - UPDATED VERSION
+// Find missing fields - MINIMAL VERSION
 function findMissingFields(customerData) {
-    const requiredFields = [
-        { key: 'customer_name', name: 'Customer Name' },
-        { key: 'custom_area', name: 'Area' },
-        { key: 'custom_building_no', name: 'Building' }
-    ];
-    
+    const requiredFields = [{ key: 'customer_name', name: 'Customer Name' }];
     const missing = [];
+    
     requiredFields.forEach(field => {
         if (!customerData[field.key] || customerData[field.key] === '') {
             if (!missing.includes(field.name)) {
@@ -184,28 +171,20 @@ function findMissingFields(customerData) {
     return missing;
 }
 
-// Create customer in ERPNext - FIXED VERSION
+// Create customer - NO VALIDATION FIELDS
 async function createCustomerInERP(registrationData) {
     try {
+        // Create customer with ONLY safe fields
         const customerData = {
             doctype: 'Customer',
             customer_name: registrationData.name,
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: '', // Left blank as requested
-            
-            // Use custom fields that exist in your system
-            custom_area: registrationData.area || '',
-            custom_building_no: registrationData.buildingName || '',
-            custom_whatsapp_number: registrationData.phoneNumber,
-            
-            // Set default values for other fields
-            default_price_list: 'Price 5',
+            territory: '', // Empty as requested
             custom_payment_mode: 'Cash',
             custom_coupon_bottle: 0,
-            
-            // Set delivery days (default to Tuesday)
+            // Delivery days
             custom_saturday: 0,
             custom_sunday: 0,
             custom_monday: 0,
@@ -215,17 +194,7 @@ async function createCustomerInERP(registrationData) {
             custom_friday: 0
         };
         
-        // Determine customer group based on building type if possible
-        if (registrationData.buildingName) {
-            const buildingLower = registrationData.buildingName.toLowerCase();
-            if (buildingLower.includes('villa')) {
-                customerData.customer_group = 'VILLA';
-            } else if (buildingLower.includes('apartment') || buildingLower.includes('flat')) {
-                customerData.customer_group = 'APARTMENT';
-            }
-        }
-        
-        console.log('Creating customer with data:', customerData);
+        console.log('Creating customer with safe data:', customerData);
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Customer`,
@@ -238,12 +207,14 @@ async function createCustomerInERP(registrationData) {
             }
         );
         
-        // Create a separate address document for GPS coordinates
+        console.log('Customer created successfully:', response.data.data.name);
+        
+        // Create address with GPS coordinates - SAFE VERSION
         if (registrationData.latitude && registrationData.longitude) {
             await createAddressRecord(response.data.data.name, registrationData);
         }
         
-        // Create contact record
+        // Create contact
         await createContactRecord(response.data.data.name, registrationData);
         
         return {
@@ -261,17 +232,16 @@ async function createCustomerInERP(registrationData) {
     }
 }
 
-// Create address record with GPS coordinates
+// Create address - NO VALIDATION FIELDS
 async function createAddressRecord(customerName, registrationData) {
     try {
+        // Use ONLY standard fields that don't require validation
         const addressData = {
             doctype: 'Address',
-            address_title: `${customerName} - Delivery Address`,
+            address_title: `${customerName} - Delivery`,
             address_type: 'Billing',
-            address_line1: registrationData.buildingName || '',
-            address_line2: `Flat ${registrationData.flatNo || ''}`,
-            city: registrationData.area || '',
-            state: 'Dubai',
+            address_line1: `${registrationData.buildingName || ''} ${registrationData.flatNo || ''}`.trim(),
+            address_line2: registrationData.area || '',
             country: 'United Arab Emirates',
             links: [{
                 link_doctype: 'Customer',
@@ -279,11 +249,13 @@ async function createAddressRecord(customerName, registrationData) {
             }]
         };
         
-        // Add GPS coordinates as custom fields in address if available
+        // Add GPS as custom fields (these should be safe)
         if (registrationData.latitude && registrationData.longitude) {
             addressData.custom_latitude = registrationData.latitude;
             addressData.custom_longitude = registrationData.longitude;
         }
+        
+        console.log('Creating address with safe data:', addressData);
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Address`,
@@ -298,13 +270,14 @@ async function createAddressRecord(customerName, registrationData) {
         
         console.log('Address created successfully:', response.data.data.name);
         
-        // Update the customer to link this address as primary address
+        // Link address to customer
         await updateCustomerPrimaryAddress(customerName, response.data.data.name);
         
         return response.data.data;
         
     } catch (error) {
         console.error('Error creating address:', error.response?.data || error.message);
+        // Don't fail customer creation if address fails
         return null;
     }
 }
@@ -335,8 +308,6 @@ async function createContactRecord(customerName, registrationData) {
         );
         
         console.log('Contact created successfully:', response.data.data.name);
-        
-        // Update customer to link this contact as primary contact
         await updateCustomerPrimaryContact(customerName, response.data.data.name);
         
         return response.data.data;
@@ -347,12 +318,10 @@ async function createContactRecord(customerName, registrationData) {
     }
 }
 
-// Update customer with primary address link
+// Update customer primary address
 async function updateCustomerPrimaryAddress(customerName, addressName) {
     try {
-        const updateData = {
-            customer_primary_address: addressName
-        };
+        const updateData = { customer_primary_address: addressName };
         
         const response = await axios.put(
             `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
@@ -365,7 +334,7 @@ async function updateCustomerPrimaryAddress(customerName, addressName) {
             }
         );
         
-        console.log('Customer primary address updated successfully');
+        console.log('Customer primary address updated');
         return response.data.data;
         
     } catch (error) {
@@ -374,12 +343,10 @@ async function updateCustomerPrimaryAddress(customerName, addressName) {
     }
 }
 
-// Update customer with primary contact link
+// Update customer primary contact
 async function updateCustomerPrimaryContact(customerName, contactName) {
     try {
-        const updateData = {
-            customer_primary_contact: contactName
-        };
+        const updateData = { customer_primary_contact: contactName };
         
         const response = await axios.put(
             `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
@@ -392,7 +359,7 @@ async function updateCustomerPrimaryContact(customerName, contactName) {
             }
         );
         
-        console.log('Customer primary contact updated successfully');
+        console.log('Customer primary contact updated');
         return response.data.data;
         
     } catch (error) {
@@ -401,7 +368,7 @@ async function updateCustomerPrimaryContact(customerName, contactName) {
     }
 }
 
-// Update customer in ERPNext - SIMPLIFIED VERSION
+// Update customer
 async function updateCustomerInERP(customerName, updateData) {
     try {
         const response = await axios.put(
@@ -426,7 +393,7 @@ async function updateCustomerInERP(customerName, updateData) {
     }
 }
 
-// Create sales order in ERPNext
+// Create sales order
 async function createSalesOrder(customerName, product, customerPhone) {
     try {
         const orderData = {
@@ -495,7 +462,7 @@ function extractLocationCoordinates(message) {
     return null;
 }
 
-// Validate service area - ONLY GPS VALIDATION
+// Validate service area
 function validateServiceArea(latitude, longitude) {
     for (const [city, area] of Object.entries(SERVICE_AREAS)) {
         const distance = calculateDistance(latitude, longitude, area.lat, area.lng);
@@ -555,15 +522,13 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
             messageData.type = 'interactive';
             messageData.interactive = {
                 type: 'button',
-                body: {
-                    text: message
-                },
+                body: { text: message },
                 action: {
                     buttons: buttons.map((btn, index) => ({
                         type: 'reply',
                         reply: {
                             id: btn.id || `button_${index}`,
-                            title: btn.title.substring(0, 20) // WhatsApp button title limit
+                            title: btn.title.substring(0, 20)
                         }
                     }))
                 }
@@ -606,13 +571,13 @@ async function handleIncomingMessage(message, phoneNumberId) {
     let response = '';
     let buttons = null;
     
-    // Handle button replies first
+    // Handle button replies
     if (buttonReply) {
         const result = await handleButtonReply(buttonReply, session);
         response = result.message;
         buttons = result.buttons;
     }
-    // Check if customer exists first
+    // Check if customer exists
     else if (session.state === 'new_user') {
         const customerCheck = await checkExistingCustomer(phoneNumber);
         
@@ -620,18 +585,15 @@ async function handleIncomingMessage(message, phoneNumberId) {
             session.customerInfo = customerCheck.customerData;
             
             if (customerCheck.missingFields.length > 0) {
-                // Existing customer with missing information
                 session.state = 'updating_missing_info';
                 response = `Welcome back!\n\nI notice your name is missing from your account. What's your full name?`;
             } else {
-                // Complete existing customer
                 session.state = 'registered';
                 const result = generateMainMenu(session);
                 response = result.message;
                 buttons = result.buttons;
             }
         } else {
-            // New customer - start registration
             session.state = REGISTRATION_STATES.COLLECTING_NAME;
             response = WELCOME_MESSAGE;
         }
@@ -642,7 +604,7 @@ async function handleIncomingMessage(message, phoneNumberId) {
         response = result.message;
         buttons = result.buttons;
     }
-    // Handle text messages based on current state
+    // Handle text messages
     else if (messageBody) {
         const result = await handleTextMessage(messageBody, session);
         response = result.message;
@@ -698,7 +660,7 @@ async function handleButtonReply(buttonId, session) {
     }
 }
 
-// Generate main menu with buttons
+// Generate main menu
 function generateMainMenu(session) {
     const customerName = session.customerInfo?.customer_name || 'valued customer';
     const message = `Welcome back, ${customerName}!\n\nPREMIUM WATER DELIVERY\n\nChoose an option below:`;
@@ -713,7 +675,7 @@ function generateMainMenu(session) {
     return { message, buttons };
 }
 
-// Generate coupon menu with buttons
+// Generate coupon menu
 function generateCouponMenu() {
     const message = `COUPON BOOK OPTIONS - SAVE MONEY!\n\n10+1 Coupon Book - AED 70\n• Get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying individually\n• Perfect for families\n\n100+40 Coupon Book - AED 700\n• Get 140 bottles (100 + 40 FREE!)\n• Save AED 280 compared to buying individually\n• Best for offices/large families\n• Buy now, pay later available\n\nWhich coupon book interests you?`;
     
@@ -726,7 +688,7 @@ function generateCouponMenu() {
     return { message, buttons };
 }
 
-// Generate single bottle offer with buttons
+// Generate single bottle offer
 function generateSingleBottleOffer() {
     const message = `Before ordering a single bottle, did you know?\n\nBETTER VALUE: Our 10+1 Coupon Book costs AED 70\n• You get 11 bottles (10 + 1 FREE)\n• Save AED 7 compared to buying single bottles\n• No deposit required per bottle\n\nSingle Bottle: AED 7 + AED 15 deposit = AED 22 total\n\nWould you prefer:`;
     
@@ -739,12 +701,12 @@ function generateSingleBottleOffer() {
     return { message, buttons };
 }
 
-// Generate order confirmation with buttons (No Area Reference)
+// Generate order confirmation
 function generateOrderConfirmation(session) {
     const product = session.currentOrder;
     const total = product.price + product.deposit;
     
-    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: Your registered address with GPS coordinates\nPayment: Cash on delivery\n\nConfirm your order?`;
+    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: Your registered GPS location\nPayment: Cash on delivery\n\nConfirm your order?`;
     
     const buttons = [
         { id: 'confirm_order', title: 'Confirm Order' },
@@ -754,7 +716,7 @@ function generateOrderConfirmation(session) {
     return { message, buttons };
 }
 
-// Generate support information
+// Generate support info
 function generateSupportInfo() {
     const message = `CUSTOMER SUPPORT\n\nCall us: +971-XX-XXXX-XXX\nWhatsApp: This number\nEmail: support@waterdelivery.com\n\nSupport Hours:\nMonday - Sunday: 8:00 AM - 10:00 PM\n\nHow can we help you today?\n• Delivery questions\n• Product information\n• Account issues\n• Complaints or feedback\n\nJust tell me what you need help with!`;
     
@@ -867,7 +829,7 @@ async function handleTextMessage(messageBody, session) {
     }
 }
 
-// Handle messages from registered customers
+// Handle registered customer messages
 async function handleRegisteredCustomerMessage(text, session) {
     if (text.includes('1') || text.includes('coupon') || text.includes('book')) {
         session.state = 'ordering_coupon';
@@ -886,17 +848,12 @@ async function handleRegisteredCustomerMessage(text, session) {
         return generateSupportInfo();
     }
     
-    // If not clear, show menu again
     return generateMainMenu(session);
 }
 
-// Handle missing information updates
+// Handle missing info updates
 async function handleMissingInfoUpdate(messageBody, session) {
-    const updateData = {
-        customer_name: messageBody.trim()
-    };
-    
-    // Update customer in ERP
+    const updateData = { customer_name: messageBody.trim() };
     const updateResult = await updateCustomerInERP(session.customerInfo.name, updateData);
     
     if (updateResult.success) {
@@ -915,7 +872,7 @@ async function handleMissingInfoUpdate(messageBody, session) {
     }
 }
 
-// Handle coupon book orders
+// Handle coupon orders
 async function handleCouponOrder(text, session) {
     let selectedProduct = null;
     
@@ -936,14 +893,12 @@ async function handleCouponOrder(text, session) {
     
     session.currentOrder = selectedProduct;
     session.state = 'confirming_order';
-    
     return generateOrderConfirmation(session);
 }
 
 // Handle order confirmations
 async function handleOrderConfirmation(text, session) {
     if (text.includes('yes') || text.includes('confirm')) {
-        // Process the order
         const orderResult = await createSalesOrder(
             session.customerInfo.name, 
             session.currentOrder,
@@ -983,11 +938,11 @@ async function handleOrderConfirmation(text, session) {
     }
 }
 
-// Generate account information
+// Generate account info
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
     
-    const message = `YOUR ACCOUNT DETAILS\n\nPhone: ${customer.mobile_no}\nName: ${customer.customer_name || 'Not provided'}\nArea: ${customer.custom_area || 'Not provided'}\nBuilding: ${customer.custom_building_no || 'Not provided'}\nMember Since: ${new Date(customer.creation).toLocaleDateString()}\n\nNeed to update any information? Just let me know!`;
+    const message = `YOUR ACCOUNT DETAILS\n\nPhone: ${customer.mobile_no}\nName: ${customer.customer_name || 'Not provided'}\nMember Since: ${new Date(customer.creation).toLocaleDateString()}\n\nYour delivery address is stored securely with GPS coordinates for accurate delivery.\n\nNeed to update any information? Just let me know!`;
     
     const buttons = [
         { id: 'back_to_menu', title: 'Back to Menu' }
@@ -1032,7 +987,7 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '7.0.0-Clean-UI-With-Buttons',
+        version: '8.0.0-No-Validation-Fields',
         activeSessions: userSessions.size,
         features: {
             customerRegistration: true,
@@ -1042,7 +997,7 @@ app.get('/health', (req, res) => {
             erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
             interactiveButtons: true,
             cleanTextFormatting: true,
-            emptyTerritoryField: true
+            noValidationFields: true
         }
     });
 });
@@ -1090,11 +1045,7 @@ app.get('/analytics', (req, res) => {
     const analytics = {
         totalSessions: userSessions.size,
         registrationStates: {},
-        customerTypes: {
-            new: 0,
-            existing: 0,
-            incomplete: 0
-        }
+        customerTypes: { new: 0, existing: 0, incomplete: 0 }
     };
     
     userSessions.forEach(session => {
@@ -1117,7 +1068,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot v7.0</title>
+        <title>WhatsApp Water Delivery Bot v8.0</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1131,32 +1082,27 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v7.0</h1>
+            <h1>WhatsApp Water Delivery Bot v8.0</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">CLEAN UI WITH INTERACTIVE BUTTONS</span></h2>
-                <p><strong>Version:</strong> 7.0.0-Clean-UI-With-Buttons</p>
+                <h2>Status: <span class="active">NO VALIDATION FIELDS</span></h2>
+                <p><strong>Version:</strong> 8.0.0-No-Validation-Fields</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>ERPNext Integration:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
 
-            <h3>NEW FEATURES:</h3>
-            <div class="feature">Interactive WhatsApp buttons for all major actions</div>
-            <div class="feature">Clean text formatting without emojis or icons</div>
-            <div class="feature">Improved user experience with button-driven navigation</div>
-            <div class="feature">Empty territory field in ERPNext customer creation</div>
-            <div class="feature">Better structured messages and responses</div>
+            <h3>LINKVALIDATION ERROR FIXES:</h3>
+            <div class="feature">Removed ALL fields that require validation from Customer creation</div>
+            <div class="feature">Address uses only standard, safe fields</div>
+            <div class="feature">Area and building stored as free text in address_line1 and address_line2</div>
+            <div class="feature">GPS coordinates stored safely in custom fields</div>
+            <div class="feature">Only validates GPS coordinates for service area</div>
 
-            <h3>ERPNEXT INTEGRATION (FIXED):</h3>
-            <div class="feature"><strong>Customer Creation:</strong> Uses custom fields properly</div>
-            <div class="feature"><strong>Territory Field:</strong> Left blank as requested</div>
-            <div class="feature"><strong>Address Creation:</strong> Separate document with GPS</div>
-            <div class="feature"><strong>Contact Creation:</strong> Proper linking to customer</div>
-
-            <h3>USER INTERFACE:</h3>
-            <div class="feature"><strong>Interactive Buttons:</strong> Main menu, product selection, order confirmation</div>
-            <div class="feature"><strong>Clean Text:</strong> No emojis or special characters</div>
-            <div class="feature"><strong>Better UX:</strong> Reduced typing, faster interactions</div>
+            <h3>SAFE ERPNEXT INTEGRATION:</h3>
+            <div class="feature"><strong>Customer Creation:</strong> Only guaranteed safe fields</div>
+            <div class="feature"><strong>Address Creation:</strong> Standard Address doctype fields only</div>
+            <div class="feature"><strong>No Link Validation:</strong> All text fields are free form</div>
+            <div class="feature"><strong>GPS Storage:</strong> Safe custom latitude/longitude fields</div>
         </div>
     </body>
     </html>
@@ -1165,9 +1111,10 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`WhatsApp Water Delivery Bot v7.0 running on port ${PORT}`);
-    console.log('Features: Interactive buttons, clean text, empty territory field');
-    console.log('ERPNext integration: Fixed with proper custom fields');
+    console.log(`WhatsApp Water Delivery Bot v8.0 running on port ${PORT}`);
+    console.log('CRITICAL FIX: Removed all validation-causing fields');
+    console.log('Address storage: Free text in address_line1/address_line2');
+    console.log('GPS validation: Only coordinates checked for service area');
     
     if (!ERPNEXT_URL) {
         console.warn('Warning: ERPNEXT_URL not configured');
