@@ -988,10 +988,11 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? WhatsApp Water Delivery Bot FIXED v6.1 running on port ${PORT}`);
-    console.log('?? ERPNext Integration: FIXED');
+    console.log(`?? WhatsApp Water Delivery Bot v6.2 running on port ${PORT}`);
+    console.log('?? Single Item Strategy: All orders use "5 Gallon Water" with different quantities');
+    console.log('?? Quantities: 1 (single), 11 (10+1), 140 (100+40)');
     console.log('?? GPS Validation Only: Area text input has no validation');
-    console.log('? Safe Field Queries: No more custom field errors');
+    console.log('? ERPNext Compatible: Uses existing item with detailed descriptions');
     
     if (!ERPNEXT_URL) {
         console.warn('??  ERPNEXT_URL not configured');

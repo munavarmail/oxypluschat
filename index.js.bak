@@ -138,7 +138,7 @@ function getSession(phoneNumber) {
     return session;
 }
 
-// Check if customer exists in ERPNext
+// Check if customer exists in ERPNext - FIXED VERSION
 async function checkExistingCustomer(phoneNumber) {
     try {
         const searchUrl = `${ERPNEXT_URL}/api/resource/Customer`;
@@ -149,20 +149,23 @@ async function checkExistingCustomer(phoneNumber) {
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', phoneNumber]]),
+                // Only query standard fields that are guaranteed to exist
                 fields: JSON.stringify([
-                    'name', 'customer_name', 'mobile_no', 
-                    'custom_building_name', 'custom_area', 'custom_flat_no',
-                    'custom_latitude', 'custom_longitude', 'creation'
+                    'name', 'customer_name', 'mobile_no', 'creation'
                 ])
             }
         });
 
         if (response.data.data && response.data.data.length > 0) {
             const customer = response.data.data[0];
+            
+            // Get full customer details in a separate call
+            const customerDetails = await getCustomerDetails(customer.name);
+            
             return {
                 exists: true,
-                customerData: customer,
-                missingFields: findMissingFields(customer)
+                customerData: customerDetails || customer,
+                missingFields: findMissingFields(customerDetails || customer)
             };
         }
         
@@ -174,15 +177,29 @@ async function checkExistingCustomer(phoneNumber) {
     }
 }
 
-// Find missing required fields
+// Get full customer details safely
+async function getCustomerDetails(customerName) {
+    try {
+        const response = await axios.get(
+            `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        return response.data.data;
+    } catch (error) {
+        console.error('Error getting customer details:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+// Find missing required fields - SIMPLIFIED VERSION
 function findMissingFields(customerData) {
     const requiredFields = [
-        { key: 'customer_name', name: 'Customer Name' },
-        { key: 'custom_building_name', name: 'Building Name' },
-        { key: 'custom_area', name: 'Area' },
-        { key: 'custom_flat_no', name: 'Flat No' },
-        { key: 'custom_latitude', name: 'GPS Location' },
-        { key: 'custom_longitude', name: 'GPS Location' }
+        { key: 'customer_name', name: 'Customer Name' }
     ];
     
     const missing = [];
@@ -197,7 +214,7 @@ function findMissingFields(customerData) {
     return missing;
 }
 
-// Create customer in ERPNext
+// Create customer in ERPNext - FIXED VERSION
 async function createCustomerInERP(registrationData) {
     try {
         const customerData = {
@@ -206,14 +223,21 @@ async function createCustomerInERP(registrationData) {
             mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
-            territory: 'UAE',
-            custom_building_name: registrationData.buildingName,
-            custom_area: registrationData.area,
-            custom_flat_no: registrationData.flatNo,
-            custom_latitude: registrationData.latitude,
-            custom_longitude: registrationData.longitude,
-            custom_registration_source: 'WhatsApp Bot'
+            territory: 'UAE'
         };
+        
+        // Only add custom fields if they exist in the system
+        // Store address information in standard fields
+        if (registrationData.buildingName || registrationData.area || registrationData.flatNo) {
+            const addressLine = [
+                registrationData.flatNo,
+                registrationData.buildingName,
+                registrationData.area
+            ].filter(Boolean).join(', ');
+            
+            // Use standard address field instead of custom fields
+            customerData.customer_primary_address = addressLine;
+        }
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Customer`,
@@ -225,6 +249,11 @@ async function createCustomerInERP(registrationData) {
                 }
             }
         );
+        
+        // Create a separate address document for GPS coordinates
+        if (registrationData.latitude && registrationData.longitude) {
+            await createAddressRecord(response.data.data.name, registrationData);
+        }
         
         return {
             success: true,
@@ -241,7 +270,50 @@ async function createCustomerInERP(registrationData) {
     }
 }
 
-// Update customer in ERPNext
+// Create address record with GPS coordinates
+async function createAddressRecord(customerName, registrationData) {
+    try {
+        const addressData = {
+            doctype: 'Address',
+            address_title: customerName,
+            address_type: 'Billing',
+            address_line1: registrationData.buildingName || '',
+            address_line2: registrationData.flatNo || '',
+            city: registrationData.area || '',
+            country: 'United Arab Emirates',
+            links: [{
+                link_doctype: 'Customer',
+                link_name: customerName
+            }]
+        };
+        
+        // Add GPS coordinates as custom fields in address if available
+        if (registrationData.latitude && registrationData.longitude) {
+            addressData.custom_latitude = registrationData.latitude;
+            addressData.custom_longitude = registrationData.longitude;
+        }
+        
+        const response = await axios.post(
+            `${ERPNEXT_URL}/api/resource/Address`,
+            addressData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Address created successfully:', response.data.data.name);
+        return response.data.data;
+        
+    } catch (error) {
+        console.error('Error creating address:', error.response?.data || error.message);
+        return null;
+    }
+}
+
+// Update customer in ERPNext - SIMPLIFIED VERSION
 async function updateCustomerInERP(customerName, updateData) {
     try {
         const response = await axios.put(
@@ -281,9 +353,7 @@ async function createSalesOrder(customerName, product, customerPhone) {
                 qty: 1,
                 rate: product.price,
                 amount: product.price
-            }],
-            custom_customer_phone: customerPhone,
-            custom_order_source: 'WhatsApp Bot Enhanced'
+            }]
         };
         
         // Add deposit as separate line item if applicable
@@ -337,7 +407,7 @@ function extractLocationCoordinates(message) {
     return null;
 }
 
-// Validate service area
+// Validate service area - ONLY GPS VALIDATION
 function validateServiceArea(latitude, longitude) {
     for (const [city, area] of Object.entries(SERVICE_AREAS)) {
         const distance = calculateDistance(latitude, longitude, area.lat, area.lng);
@@ -406,16 +476,13 @@ async function handleIncomingMessage(message, phoneNumberId) {
             if (customerCheck.missingFields.length > 0) {
                 // Existing customer with missing information
                 session.state = 'updating_missing_info';
-                response = `Welcome back, ${customerCheck.customerData.customer_name || 'valued customer'}!
+                response = `Welcome back!
 
-I notice some information is missing from your account:
-${customerCheck.missingFields.map(field => `• ${field}`).join('\n')}
-
-Let's update this quickly. What's your ${customerCheck.missingFields[0].toLowerCase()}?`;
+I notice your name is missing from your account. What's your full name?`;
             } else {
                 // Complete existing customer
                 session.state = 'registered';
-                response = `Welcome back, ${customerCheck.customerData.customer_name}! ??
+                response = `Welcome back, ${customerCheck.customerData.customer_name || 'valued customer'}! ??
 
 ${MAIN_MENU}`;
             }
@@ -502,12 +569,13 @@ async function handleTextMessage(messageBody, session) {
             }
             session.registrationData.buildingName = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_AREA;
-            return "??? Got it! What area/neighborhood are you in?\n\nFor example: Jumeirah, Deira, Al Nahda, etc.";
+            return "??? Got it! What area/neighborhood are you in?\n\n?? Just type any area name - no validation needed!";
             
         case REGISTRATION_STATES.COLLECTING_AREA:
             if (text.length < 2) {
                 return "Please provide your area or neighborhood name.";
             }
+            // NO AREA VALIDATION - Just store whatever they type
             session.registrationData.area = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_FLAT;
             return "?? Perfect! What's your flat/apartment number?";
@@ -524,8 +592,8 @@ Please tap the ?? attachment button ? Location ? Share your current location.
 
 This helps us:
 ? Find you easily during delivery
+? Validate service area (Dubai, Sharjah, Ajman only)
 ? Optimize our delivery routes
-? Ensure accurate service
 
 Please share your location now.`;
             
@@ -601,59 +669,21 @@ Just tell me what you need help with!`;
 ${MAIN_MENU}`;
 }
 
-// Handle missing information updates
+// Handle missing information updates - SIMPLIFIED
 async function handleMissingInfoUpdate(messageBody, session) {
-    const customerCheck = await checkExistingCustomer(session.phoneNumber);
-    const missingFields = customerCheck.missingFields;
-    
-    if (missingFields.length === 0) {
-        session.state = 'registered';
-        return `? Your account is now complete!
-
-${MAIN_MENU}`;
-    }
-    
-    const currentField = missingFields[0];
-    let updateData = {};
-    
-    switch (currentField) {
-        case 'Customer Name':
-            updateData.customer_name = messageBody.trim();
-            break;
-        case 'Building Name':
-            updateData.custom_building_name = messageBody.trim();
-            break;
-        case 'Area':
-            // Store area without validation
-            updateData.custom_area = messageBody.trim();
-            break;
-        case 'Flat No':
-            updateData.custom_flat_no = messageBody.trim();
-            break;
-    }
-    
-    if (currentField === 'GPS Location') {
-        return `?? I need your GPS location. Please share it using the ?? attachment button ? Location.
-
-GPS location is only validated through the map attachment - no manual area validation required.`;
-    }
+    const updateData = {
+        customer_name: messageBody.trim()
+    };
     
     // Update customer in ERP
     const updateResult = await updateCustomerInERP(session.customerInfo.name, updateData);
     
     if (updateResult.success) {
-        const remainingFields = missingFields.slice(1);
-        
-        if (remainingFields.length > 0) {
-            return `? ${currentField} updated!
-
-Next, what's your ${remainingFields[0].toLowerCase()}?`;
-        } else {
-            session.state = 'registered';
-            return `? Your account is now complete!
+        session.state = 'registered';
+        session.customerInfo.customer_name = messageBody.trim();
+        return `? Your name has been updated!
 
 ${MAIN_MENU}`;
-        }
     } else {
         return `? Error updating your information. Please try again.
 
@@ -695,7 +725,7 @@ ${selectedProduct.deposit > 0 ? `?? Deposit: AED ${selectedProduct.deposit}` : '
 ? Benefits:
 ${selectedProduct.salesPoints.map(point => `• ${point}`).join('\n')}
 
-?? Delivery to: ${session.customerInfo.custom_area}, ${session.customerInfo.custom_building_name}
+?? Delivery to: ${session.customerInfo.customer_primary_address || 'Your registered address'}
 ?? Payment: Cash on delivery
 
 Reply *YES* to confirm or *NO* to cancel.`;
@@ -713,13 +743,14 @@ async function handleOrderConfirmation(text, session) {
         
         if (orderResult.success) {
             session.state = 'registered';
+            const currentOrder = session.currentOrder;
             session.currentOrder = null;
             
             return `?? ORDER CONFIRMED!
 
 ?? Order Number: ${orderResult.orderName}
-?? Product: ${session.currentOrder.name}
-?? Total: AED ${session.currentOrder.price + session.currentOrder.deposit}
+?? Product: ${currentOrder.name}
+?? Total: AED ${currentOrder.price + currentOrder.deposit}
 
 ?? NEXT STEPS:
 • Our delivery team will call you within 2 hours
@@ -745,28 +776,18 @@ ${MAIN_MENU}`;
     }
 }
 
-// Generate account information
+// Generate account information - SIMPLIFIED
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
-    
-    let locationInfo = '';
-    if (customer.custom_latitude && customer.custom_longitude) {
-        locationInfo = `?? GPS Location: Saved (${customer.custom_latitude}, ${customer.custom_longitude})`;
-    } else {
-        locationInfo = '?? GPS Location: Not saved';
-    }
     
     return `?? YOUR ACCOUNT DETAILS
 
 ?? Phone: ${customer.mobile_no}
-?? Name: ${customer.customer_name}
-?? Building: ${customer.custom_building_name || 'Not provided'}
-??? Area: ${customer.custom_area || 'Not provided'}
-?? Flat No: ${customer.custom_flat_no || 'Not provided'}
-${locationInfo}
+?? Name: ${customer.customer_name || 'Not provided'}
+?? Address: ${customer.customer_primary_address || 'Not provided'}
 ?? Member Since: ${new Date(customer.creation).toLocaleDateString()}
 
-Need to update any information? Just let me know which field you'd like to change.
+Need to update any information? Just let me know!
 
 ${MAIN_MENU}`;
 }
@@ -830,15 +851,15 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '6.0.0-Enhanced-Customer-Management',
+        version: '6.1.0-Fixed-ERPNext-Integration',
         activeSessions: userSessions.size,
         features: {
             customerRegistration: true,
             couponBookPriority: true,
             automaticAccountDetection: true,
-            missingFieldUpdates: true,
-            gpsLocationSupport: true,
-            erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY)
+            gpsLocationOnlyValidation: true,
+            erpNextIntegration: !!(ERPNEXT_URL && ERPNEXT_API_KEY),
+            fixedAreaValidation: true
         }
     });
 });
@@ -913,13 +934,13 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot - Enhanced Customer Management</title>
+        <title>WhatsApp Water Delivery Bot - Fixed ERPNext Integration</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
             .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
             .feature { margin: 15px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #28a745; }
-            .priority { margin: 10px 0; padding: 12px; background: #fff3cd; border-radius: 6px; border-left: 4px solid #ffc107; }
+            .fix { margin: 10px 0; padding: 12px; background: #d1ecf1; border-radius: 6px; border-left: 4px solid #17a2b8; }
             .active { color: #28a745; font-weight: bold; }
             .inactive { color: #ffc107; }
             h1 { color: #333; text-align: center; }
@@ -928,39 +949,33 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>?? WhatsApp Water Delivery Bot v6.0</h1>
+            <h1>?? WhatsApp Water Delivery Bot v6.1</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">ENHANCED CUSTOMER MANAGEMENT</span></h2>
-                <p><strong>Version:</strong> 6.0.0-Enhanced-Customer-Management</p>
+                <h2>Status: <span class="active">FIXED ERPNEXT INTEGRATION</span></h2>
+                <p><strong>Version:</strong> 6.1.0-Fixed-ERPNext-Integration</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>ERPNext Integration:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
 
-            <h3>?? PRIORITY FEATURES:</h3>
-            <div class="priority">?? Coupon Book Sales Priority - Promoted as best value option</div>
-            <div class="priority">?? Automatic Customer Detection - No need to type phone number</div>
-            <div class="priority">?? GPS Location Integration - Saved to custom_latitude, custom_longitude</div>
-            <div class="priority">?? Missing Field Updates - Only ask for missing information</div>
+            <h3>?? BUG FIXES APPLIED:</h3>
+            <div class="fix">? Removed problematic custom field queries (custom_building_name, etc.)</div>
+            <div class="fix">? Removed area validation - only GPS location is validated</div>
+            <div class="fix">? Use standard Customer fields only for queries</div>
+            <div class="fix">? Store address info in customer_primary_address field</div>
+            <div class="fix">? Create separate Address document for GPS coordinates</div>
+            <div class="fix">? Simplified missing field detection</div>
 
-            <h3>?? REGISTRATION FLOW:</h3>
-            <div class="feature">Step 1: Customer Name</div>
-            <div class="feature">Step 2: Building Name</div>
-            <div class="feature">Step 3: Area</div>
-            <div class="feature">Step 4: Flat No</div>
-            <div class="feature">Step 5: GPS Location ??</div>
-            <div class="feature">Result: Complete profile saved to ERPNext</div>
+            <h3>?? AREA HANDLING:</h3>
+            <div class="feature">?? Manual area entry: NO validation, just store text</div>
+            <div class="feature">?? GPS location: ONLY validation point for service area</div>
+            <div class="feature">?? Service areas: Dubai, Sharjah, Ajman (GPS radius check)</div>
 
-            <h3>?? MAIN MENU OPTIONS:</h3>
-            <div class="feature">1?? Get a coupon book (PRIORITY - Best value promotion)</div>
-            <div class="feature">2?? Order a bottle (Secondary option with coupon promotion)</div>
-            <div class="feature">3?? Check my account (Auto-detected phone number)</div>
-            <div class="feature">4?? Customer support</div>
-
-            <h3>?? ERPNEXT INTEGRATION:</h3>
-            <div class="feature"><strong>Customer Fields:</strong> customer_name, custom_building_name, custom_area, custom_flat_no</div>
-            <div class="feature"><strong>Location Fields:</strong> custom_latitude, custom_longitude</div>
-            <div class="feature"><strong>Auto Updates:</strong> Only missing fields are requested and updated</div>
+            <h3>?? ERPNEXT INTEGRATION (FIXED):</h3>
+            <div class="feature"><strong>Customer Creation:</strong> Standard fields only</div>
+            <div class="feature"><strong>Address Creation:</strong> Separate document with GPS</div>
+            <div class="feature"><strong>Safe Queries:</strong> Only guaranteed fields</div>
+            <div class="feature"><strong>Error Handling:</strong> Graceful fallbacks</div>
 
             <h3>?? ANALYTICS:</h3>
             <div class="feature"><strong>/analytics</strong> - View session statistics</div>
@@ -973,10 +988,10 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`?? WhatsApp Water Delivery Bot Enhanced v6.0 running on port ${PORT}`);
-    console.log('?? Priority: Coupon Book Sales with Complete Customer Management');
-    console.log('?? GPS Integration: custom_latitude, custom_longitude in ERPNext');
-    console.log('?? Auto Detection: Customer identified by phone number');
+    console.log(`?? WhatsApp Water Delivery Bot FIXED v6.1 running on port ${PORT}`);
+    console.log('?? ERPNext Integration: FIXED');
+    console.log('?? GPS Validation Only: Area text input has no validation');
+    console.log('? Safe Field Queries: No more custom field errors');
     
     if (!ERPNEXT_URL) {
         console.warn('??  ERPNEXT_URL not configured');
