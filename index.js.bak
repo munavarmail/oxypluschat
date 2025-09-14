@@ -28,14 +28,15 @@ const SERVICE_AREAS = {
     ajman: { lat: 25.4052, lng: 55.5136, radius: 25 }
 };
 
-// Product catalog
+// Product catalog - ALL USE "5 Gallon Water" ITEM CODE
 const PRODUCTS = {
     'coupon_10_1': { 
         name: '10+1 Coupon Book', 
         price: 70, 
         deposit: 0, 
-        item_code: 'Coupon Book 10+1',
-        description: '11 bottles total (10+1 free) - Save money and time!',
+        item_code: '5 Gallon Water',
+        qty: 11,
+        description: '10+1 Coupon Book - 11 bottles total (10 bottles + 1 FREE bonus bottle) - Premium 5 gallon water delivery package',
         priority: 1,
         salesPoints: ['Save AED 7 compared to individual bottles', '1 FREE bottle included', 'No deposit required']
     },
@@ -43,8 +44,9 @@ const PRODUCTS = {
         name: '100+40 Coupon Book', 
         price: 700, 
         deposit: 0, 
-        item_code: 'Coupon Book 100+40',
-        description: '140 bottles total (100+40 free) - Best value package!',
+        item_code: '5 Gallon Water',
+        qty: 140,
+        description: '100+40 Coupon Book - 140 bottles total (100 bottles + 40 FREE bonus bottles) - Best value 5 gallon water delivery package',
         priority: 1,
         salesPoints: ['Save AED 280 compared to individual bottles', '40 FREE bottles included', 'Buy now pay later available']
     },
@@ -52,8 +54,9 @@ const PRODUCTS = {
         name: 'Single Bottle', 
         price: 7, 
         deposit: 15, 
-        item_code: '5 Gallon Filled',
-        description: '5-gallon premium water bottle',
+        item_code: '5 Gallon Water',
+        qty: 1,
+        description: 'Single 5-gallon premium water bottle for immediate delivery',
         priority: 2,
         salesPoints: ['Perfect for trying our service', 'Premium quality water']
     }
@@ -393,35 +396,48 @@ async function updateCustomerInERP(customerName, updateData) {
     }
 }
 
-// Create sales order
+// Create sales order - SINGLE ITEM STRATEGY USING "5 Gallon Water"
 async function createSalesOrder(customerName, product, customerPhone) {
     try {
+        // Calculate rate per bottle for the package
+        const ratePerBottle = product.price / product.qty;
+        
         const orderData = {
             doctype: 'Sales Order',
             customer: customerName,
             order_type: 'Sales',
             delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             items: [{
-                item_code: product.item_code,
-                item_name: product.name,
-                description: product.description,
-                qty: 1,
-                rate: product.price,
-                amount: product.price
+                item_code: '5 Gallon Water', // ALWAYS use existing ERPNext item
+                item_name: product.name, // Display name (e.g., "10+1 Coupon Book")
+                description: product.description, // Full product description with details
+                qty: product.qty, // 1, 11, or 140 based on package
+                rate: ratePerBottle, // Price per bottle
+                amount: product.price // Total amount for this line
             }]
         };
         
-        // Add deposit as separate line item if applicable
+        // Add deposit as separate line item if applicable (also using 5 Gallon Water)
         if (product.deposit > 0) {
             orderData.items.push({
-                item_code: 'Bottle Deposit',
+                item_code: '5 Gallon Water', // Use same item code for deposit
                 item_name: 'Bottle Deposit',
-                description: 'Refundable bottle deposit',
+                description: 'Refundable bottle deposit for 5 gallon water container - will be refunded when empty bottle is returned',
                 qty: 1,
                 rate: product.deposit,
                 amount: product.deposit
             });
         }
+        
+        console.log('Creating sales order with single item strategy:', {
+            customer: customerName,
+            productName: product.name,
+            itemCode: '5 Gallon Water',
+            quantity: product.qty,
+            ratePerBottle: ratePerBottle.toFixed(2),
+            totalAmount: product.price + product.deposit,
+            hasDeposit: product.deposit > 0
+        });
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Sales Order`,
@@ -433,6 +449,8 @@ async function createSalesOrder(customerName, product, customerPhone) {
                 }
             }
         );
+        
+        console.log('Sales order created successfully:', response.data.data.name);
         
         return {
             success: true,
@@ -510,7 +528,7 @@ function findNearestCity(latitude, longitude) {
     return nearest;
 }
 
-// Send WhatsApp message - FIXED VERSION WITH MAX 3 BUTTONS
+// Send WhatsApp message - MAXIMUM 3 BUTTONS WITH ENHANCED ERROR HANDLING
 async function sendMessage(to, message, phoneNumberId, buttons = null) {
     try {
         let messageData = {
@@ -557,12 +575,16 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
             messageData.text = { body: message };
         }
 
-        // Final validation check
-        if (messageData.type === 'interactive' && 
-            messageData.interactive.action.buttons.length > 3) {
-            console.log('ERROR: Too many buttons detected, converting to text');
-            messageData.type = 'text';
-            messageData.text = { body: message };
+        // Final safety check for button count
+        if (messageData.type === 'interactive') {
+            const buttonCount = messageData.interactive.action.buttons.length;
+            if (buttonCount > 3) {
+                console.log(`ERROR: ${buttonCount} buttons detected (max 3), converting to text`);
+                messageData.type = 'text';
+                messageData.text = { body: message };
+            } else {
+                console.log(`Final button count: ${buttonCount} (within WhatsApp limit)`);
+            }
         }
 
         await axios.post(
@@ -579,9 +601,9 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
     } catch (error) {
         console.error('Error sending message:', error.response?.data || error.message);
         
-        // If button message fails, send as text only
+        // If button message fails due to button issues, send as text only
         if (error.response?.data?.error?.code === 131009) {
-            console.log('Button error detected, sending as text message...');
+            console.log('WhatsApp button error detected, sending as text message...');
             try {
                 await axios.post(
                     `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
@@ -598,9 +620,9 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
                         }
                     }
                 );
-                console.log('Text message sent successfully');
+                console.log('Text message fallback sent successfully');
             } catch (retryError) {
-                console.error('Text message retry failed:', retryError.response?.data || retryError.message);
+                console.error('Text message fallback failed:', retryError.response?.data || retryError.message);
             }
         }
     }
@@ -729,7 +751,7 @@ function generateMainMenu(session) {
     return { message, buttons };
 }
 
-// Generate more options menu
+// Generate more options menu - MAX 3 BUTTONS
 function generateMoreOptionsMenu() {
     const message = `MORE OPTIONS\n\nWhat would you like to do?`;
     
@@ -773,7 +795,7 @@ function generateOrderConfirmation(session) {
     const product = session.currentOrder;
     const total = product.price + product.deposit;
     
-    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: Your registered GPS location\nPayment: Cash on delivery\n\nConfirm your order?`;
+    const message = `ORDER CONFIRMATION\n\nProduct: ${product.name}\nDescription: ${product.description}\nQuantity: ${product.qty} bottles\nPrice: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}\nTOTAL: AED ${total}\n\nBenefits:\n${product.salesPoints.map(point => `• ${point}`).join('\n')}\n\nDelivery to: Your registered GPS location\nPayment: Cash on delivery\n\nConfirm your order?`;
     
     const buttons = [
         { id: 'confirm_order', title: 'Confirm Order' },
@@ -979,7 +1001,7 @@ async function handleOrderConfirmation(text, session) {
             
             const mainMenu = generateMainMenu(session);
             return {
-                message: `ORDER CONFIRMED!\n\nOrder Number: ${orderResult.orderName}\nProduct: ${currentOrder.name}\nTotal: AED ${currentOrder.price + currentOrder.deposit}\n\nNEXT STEPS:\n• Our delivery team will call you within 2 hours\n• Delivery within 24 hours\n• Payment on delivery (Cash/Card)\n\nThank you for choosing our premium water service!\n\n${mainMenu.message}`,
+                message: `ORDER CONFIRMED!\n\nOrder Number: ${orderResult.orderName}\nProduct: ${currentOrder.name}\nQuantity: ${currentOrder.qty} bottles\nTotal: AED ${currentOrder.price + currentOrder.deposit}\n\nNEXT STEPS:\n• Our delivery team will call you within 2 hours\n• Delivery within 24 hours\n• Payment on delivery (Cash/Card)\n\nThank you for choosing our premium water service!\n\n${mainMenu.message}`,
                 buttons: mainMenu.buttons
             };
         } else {
@@ -1054,7 +1076,7 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '9.0.0-Final-Fixed-Buttons',
+        version: '10.0.0-Single-Item-Strategy',
         activeSessions: userSessions.size,
         features: {
             customerRegistration: true,
@@ -1065,7 +1087,8 @@ app.get('/health', (req, res) => {
             interactiveButtons: true,
             cleanTextFormatting: true,
             noValidationFields: true,
-            maxThreeButtons: true
+            maxThreeButtons: true,
+            singleItemStrategy: true
         }
     });
 });
@@ -1136,7 +1159,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Water Delivery Bot v9.0</title>
+        <title>WhatsApp Water Delivery Bot v10.0</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -1150,31 +1173,32 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v9.0</h1>
+            <h1>WhatsApp Water Delivery Bot v10.0</h1>
             
             <div class="status">
-                <h2>Status: <span class="active">FINAL FIXED VERSION</span></h2>
-                <p><strong>Version:</strong> 9.0.0-Final-Fixed-Buttons</p>
+                <h2>Status: <span class="active">SINGLE ITEM STRATEGY</span></h2>
+                <p><strong>Version:</strong> 10.0.0-Single-Item-Strategy</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
                 <p><strong>ERPNext Integration:</strong> <span class="${ERPNEXT_URL ? 'active' : 'inactive'}">${ERPNEXT_URL ? 'ENABLED' : 'DISABLED'}</span></p>
             </div>
 
-            <h3>WHATSAPP BUTTON FIXES:</h3>
-            <div class="feature">Maximum 3 buttons per message (WhatsApp API limit)</div>
-            <div class="feature">Main menu restructured with "More Options" submenu</div>
-            <div class="feature">Enhanced button validation and error handling</div>
-            <div class="feature">Automatic fallback to text messages if buttons fail</div>
-            <div class="feature">Detailed button debugging and logging</div>
+            <h3>SINGLE ITEM STRATEGY:</h3>
+            <div class="feature">All orders use "5 Gallon Water" item code (only available item)</div>
+            <div class="feature">Product details stored in description field</div>
+            <div class="feature">Quantities: 1 (single), 11 (10+1), 140 (100+40)</div>
+            <div class="feature">Rate calculated per bottle for proper accounting</div>
+            <div class="feature">Deposits also use "5 Gallon Water" item with descriptive text</div>
 
-            <h3>BUTTON STRUCTURE:</h3>
-            <div class="feature"><strong>Main Menu:</strong> Coupon Books, Single Bottle, More Options</div>
-            <div class="feature"><strong>More Options:</strong> My Account, Support, Back to Menu</div>
-            <div class="feature"><strong>All Menus:</strong> Maximum 3 buttons each</div>
+            <h3>ORDER EXAMPLES:</h3>
+            <div class="feature"><strong>10+1 Coupon:</strong> Item: 5 Gallon Water, Qty: 11, Rate: AED 6.36/bottle</div>
+            <div class="feature"><strong>Single Bottle:</strong> Item: 5 Gallon Water, Qty: 1, Rate: AED 7/bottle + deposit</div>
+            <div class="feature"><strong>100+40 Coupon:</strong> Item: 5 Gallon Water, Qty: 140, Rate: AED 5/bottle</div>
 
-            <h3>ERPNEXT INTEGRATION:</h3>
-            <div class="feature"><strong>No Validation Errors:</strong> Removed all Link field dependencies</div>
-            <div class="feature"><strong>Safe Customer Creation:</strong> Only guaranteed safe fields</div>
-            <div class="feature"><strong>GPS-Only Validation:</strong> Service area check by coordinates</div>
+            <h3>ALL PREVIOUS FIXES:</h3>
+            <div class="feature">Maximum 3 WhatsApp buttons per message</div>
+            <div class="feature">No ERPNext validation field errors</div>
+            <div class="feature">GPS-only location validation</div>
+            <div class="feature">Clean text formatting without emojis</div>
         </div>
     </body>
     </html>
@@ -1183,10 +1207,10 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`WhatsApp Water Delivery Bot v9.0 running on port ${PORT}`);
-    console.log('FIXED: Maximum 3 buttons per WhatsApp message');
-    console.log('FIXED: No ERPNext validation field errors');
-    console.log('FIXED: Enhanced error handling and debugging');
+    console.log(`WhatsApp Water Delivery Bot v10.0 running on port ${PORT}`);
+    console.log('SINGLE ITEM STRATEGY: All orders use "5 Gallon Water" item');
+    console.log('Product differentiation through descriptions and quantities');
+    console.log('Fixed: WhatsApp buttons, ERPNext validation, item codes');
     
     if (!ERPNEXT_URL) {
         console.warn('Warning: ERPNEXT_URL not configured');
