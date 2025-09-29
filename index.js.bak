@@ -880,7 +880,7 @@ async function handleTextMessage(messageBody, session) {
             }
             session.registrationData.buildingName = messageBody.trim();
             session.state = REGISTRATION_STATES.COLLECTING_AREA;
-            return { message: "Got it! What area/neighborhood are you in?\n\nJust type any area name - no validation needed!", buttons: null };
+            return { message: "Got it! What area/neighborhood are you in?\n\nJust type any area name - !", buttons: null };
             
         case REGISTRATION_STATES.COLLECTING_AREA:
             if (text.length < 2) {
