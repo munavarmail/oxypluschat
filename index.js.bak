@@ -32,13 +32,33 @@ const SERVICE_AREAS = {
 const PRODUCTS = {
     'coupon_10_1': { 
         name: '10+1 Coupon Book', 
-        price: 70, 
+        price: 65, 
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 11,
         description: '10+1 Coupon Book - 11 bottles total (10 bottles + 1 FREE bonus bottle)',
         priority: 1,
-        salesPoints: ['Save AED 7 vs individual bottles', '1 FREE bottle included', 'No deposit required']
+        salesPoints: ['11 bottles for AED 65', '1 FREE bottle included', 'Perfect for small families']
+    },
+    'coupon_25_5': { 
+        name: '25+5 Coupon Book', 
+        price: 175, 
+        deposit: 0, 
+        item_code: '5 Gallon Water',
+        qty: 30,
+        description: '25+5 Coupon Book - 30 bottles total (25 bottles + 5 FREE bonus bottles)',
+        priority: 1,
+        salesPoints: ['30 bottles for AED 175', '5 FREE bottles included', 'Great value for families']
+    },
+    'coupon_30_7': { 
+        name: '30+7 Coupon Book', 
+        price: 210, 
+        deposit: 0, 
+        item_code: '5 Gallon Water',
+        qty: 37,
+        description: '30+7 Coupon Book - 37 bottles total (30 bottles + 7 FREE bonus bottles)',
+        priority: 1,
+        salesPoints: ['37 bottles for AED 210', '7 FREE bottles included', 'Popular choice']
     },
     'coupon_100_40': { 
         name: '100+40 Coupon Book', 
@@ -48,17 +68,17 @@ const PRODUCTS = {
         qty: 140,
         description: '100+40 Coupon Book - 140 bottles total (100 bottles + 40 FREE bonus bottles)',
         priority: 1,
-        salesPoints: ['Save AED 280 vs individual', '40 FREE bottles included', 'Buy now pay later available']
+        salesPoints: ['140 bottles for AED 700', '40 FREE bottles included', 'Best value for offices']
     },
-    'single_bottle': { 
-        name: 'Single Bottle', 
-        price: 7, 
-        deposit: 15, 
+    'coupon_100_cooler': { 
+        name: '100 Bottles + Cooler', 
+        price: 800, 
+        deposit: 0, 
         item_code: '5 Gallon Water',
-        qty: 1,
-        description: 'Single 5-gallon premium water bottle',
-        priority: 2,
-        salesPoints: ['Perfect for trying our service', 'Premium quality water']
+        qty: 100,
+        description: '100 Bottles + FREE Water Cooler - Complete water solution package',
+        priority: 1,
+        salesPoints: ['100 bottles + FREE cooler', 'Complete package for AED 800', 'Perfect for offices']
     }
 };
 
@@ -766,27 +786,37 @@ function generateMoreOptionsMenu() {
 function generateProductListMessage() {
     const sections = [
         {
-            title: "Coupon Books", // Max 24 chars
+            title: "Family Packages", // Max 24 chars
             rows: [
                 {
                     id: "product_coupon_10_1",
-                    title: "10+1 Book - AED 70", // Max 24 chars
-                    description: "11 bottles total. Save AED 7. No deposit required." // Max 72 chars
+                    title: "10+1 - AED 65", // Max 24 chars
+                    description: "11 bottles total. 1 FREE bottle. Small families." // Max 72 chars
                 },
                 {
-                    id: "product_coupon_100_40",
-                    title: "100+40 Book - AED 700", // Max 24 chars
-                    description: "140 bottles total. Save AED 280. Best value package!" // Max 72 chars
+                    id: "product_coupon_25_5",
+                    title: "25+5 - AED 175", // Max 24 chars
+                    description: "30 bottles total. 5 FREE bottles. Great value!" // Max 72 chars
+                },
+                {
+                    id: "product_coupon_30_7",
+                    title: "30+7 - AED 210", // Max 24 chars
+                    description: "37 bottles total. 7 FREE bottles. Popular choice!" // Max 72 chars
                 }
             ]
         },
         {
-            title: "Single Purchase",
+            title: "Premium Packages",
             rows: [
                 {
-                    id: "product_single_bottle",
-                    title: "Single Bottle", // Max 24 chars
-                    description: "AED 7 + AED 15 deposit. Premium 5-gallon water." // Max 72 chars
+                    id: "product_coupon_100_40",
+                    title: "100+40 - AED 700", // Max 24 chars
+                    description: "140 bottles. 40 FREE bottles. Best value package!" // Max 72 chars
+                },
+                {
+                    id: "product_coupon_100_cooler",
+                    title: "100+Cooler - AED 800", // Max 24 chars
+                    description: "100 bottles + FREE cooler. Complete solution!" // Max 72 chars
                 }
             ]
         }
@@ -796,8 +826,8 @@ function generateProductListMessage() {
         message: null,
         buttons: null,
         listData: {
-            header: "PREMIUM WATER DELIVERY",
-            body: "Choose your water delivery package. Coupon books offer the best value with free bonus bottles!",
+            header: "WATER DELIVERY",
+            body: "Choose your package. All coupon books include FREE bonus bottles! Cooler package includes a FREE water cooler.",
             buttonText: "View Products",
             footer: "Cash on delivery",
             sections: sections
@@ -809,24 +839,27 @@ function generateProductListMessage() {
 function generateProductList() {
     const message = `PRODUCT CATALOG
 
-1. 10+1 COUPON BOOK - AED 70
-   Get 11 bottles (10 + 1 FREE)
-   - Save AED 7 vs buying individually
-   - No deposit required
-   - Perfect for families
+1. 10+1 COUPON - AED 65
+   11 bottles total (10 + 1 FREE)
+   Perfect for small families
 
-2. 100+40 COUPON BOOK - AED 700
-   Get 140 bottles (100 + 40 FREE!)
-   - Save AED 280 vs buying individually
-   - Buy now, pay later available
-   - Best for offices/large families
+2. 25+5 COUPON - AED 175
+   30 bottles total (25 + 5 FREE)
+   Great value package
 
-3. SINGLE BOTTLE - AED 7 + AED 15 deposit
-   Perfect for trying our service
-   - Premium quality 5-gallon water
-   - Deposit refunded on return
+3. 30+7 COUPON - AED 210
+   37 bottles total (30 + 7 FREE)
+   Popular choice!
 
-Reply with the number (1, 2, or 3) to order, or type 'menu' to go back.`;
+4. 100+40 COUPON - AED 700
+   140 bottles total (100 + 40 FREE)
+   Best value for offices
+
+5. 100 + COOLER - AED 800
+   100 bottles + FREE water cooler
+   Complete package!
+
+Reply with number (1-5) to order, or type 'menu' to go back.`;
     
     return { message, buttons: null };
 }
