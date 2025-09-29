@@ -509,7 +509,7 @@ function findNearestCity(latitude, longitude) {
     return nearest;
 }
 
-// Send WhatsApp message
+// Send WhatsApp message (buttons or text)
 async function sendMessage(to, message, phoneNumberId, buttons = null) {
     try {
         let messageData = {
@@ -562,20 +562,79 @@ async function sendMessage(to, message, phoneNumberId, buttons = null) {
     }
 }
 
+// Send WhatsApp list message
+async function sendListMessage(to, bodyText, buttonText, sections, phoneNumberId, header = null, footer = null) {
+    try {
+        const messageData = {
+            messaging_product: 'whatsapp',
+            to: to,
+            type: 'interactive',
+            interactive: {
+                type: 'list',
+                body: {
+                    text: bodyText
+                },
+                action: {
+                    button: buttonText.substring(0, 20), // Max 20 chars
+                    sections: sections
+                }
+            }
+        };
+
+        // Optional header
+        if (header) {
+            messageData.interactive.header = {
+                type: 'text',
+                text: header.substring(0, 60) // Max 60 chars
+            };
+        }
+
+        // Optional footer
+        if (footer) {
+            messageData.interactive.footer = {
+                text: footer.substring(0, 60) // Max 60 chars
+            };
+        }
+
+        await axios.post(
+            `https://graph.facebook.com/v18.0/${phoneNumberId}/messages`,
+            messageData,
+            {
+                headers: {
+                    'Authorization': `Bearer ${GRAPH_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log('List message sent successfully');
+    } catch (error) {
+        console.error('Error sending list message:', error.response?.data || error.message);
+    }
+}
+
 // Main message handler
 async function handleIncomingMessage(message, phoneNumberId) {
     const phoneNumber = message.from;
     const messageBody = message.text?.body;
     const location = message.location;
     const buttonReply = message.interactive?.button_reply?.id;
+    const listReply = message.interactive?.list_reply?.id;
     
     const session = getSession(phoneNumber);
     let response = '';
     let buttons = null;
+    let listData = null;
     
     // Handle button replies
     if (buttonReply) {
         const result = await handleButtonReply(buttonReply, session);
+        response = result.message;
+        buttons = result.buttons;
+        listData = result.listData;
+    }
+    // Handle list replies (product selection)
+    else if (listReply) {
+        const result = await handleListReply(listReply, session);
         response = result.message;
         buttons = result.buttons;
     }
@@ -616,16 +675,23 @@ async function handleIncomingMessage(message, phoneNumberId) {
         const result = await handleTextMessage(messageBody, session);
         response = result.message;
         buttons = result.buttons;
+        listData = result.listData;
     }
     
-    await sendMessage(phoneNumber, response, phoneNumberId, buttons);
+    // Send appropriate message type
+    if (listData) {
+        await sendListMessage(phoneNumber, listData.body, listData.buttonText, listData.sections, phoneNumberId, listData.header, listData.footer);
+    } else {
+        await sendMessage(phoneNumber, response, phoneNumberId, buttons);
+    }
 }
 
 // Handle button replies
 async function handleButtonReply(buttonId, session) {
     switch (buttonId) {
         case 'view_products':
-            return generateProductList();
+            session.state = 'viewing_products';
+            return generateProductListMessage();
             
         case 'more_options':
             return generateMoreOptionsMenu();
@@ -649,6 +715,25 @@ async function handleButtonReply(buttonId, session) {
         default:
             return { message: "I didn't understand that selection. Please try again.", buttons: null };
     }
+}
+
+// Handle list replies (product selection)
+async function handleListReply(listReplyId, session) {
+    // Product selection
+    if (listReplyId.startsWith('product_')) {
+        const productKey = listReplyId.replace('product_', '');
+        
+        if (PRODUCTS[productKey]) {
+            session.currentOrder = PRODUCTS[productKey];
+            session.state = 'confirming_order';
+            return generateOrderConfirmation(session);
+        }
+    }
+    
+    return { 
+        message: "I didn't understand that selection. Please try again.", 
+        buttons: null 
+    };
 }
 
 // Generate main menu with buttons
@@ -677,7 +762,50 @@ function generateMoreOptionsMenu() {
     return { message, buttons };
 }
 
-// Generate product list (text-based, no buttons)
+// Generate product list as WhatsApp interactive list
+function generateProductListMessage() {
+    const sections = [
+        {
+            title: "Coupon Books", // Max 24 chars
+            rows: [
+                {
+                    id: "product_coupon_10_1",
+                    title: "10+1 Book - AED 70", // Max 24 chars
+                    description: "11 bottles total. Save AED 7. No deposit required." // Max 72 chars
+                },
+                {
+                    id: "product_coupon_100_40",
+                    title: "100+40 Book - AED 700", // Max 24 chars
+                    description: "140 bottles total. Save AED 280. Best value package!" // Max 72 chars
+                }
+            ]
+        },
+        {
+            title: "Single Purchase",
+            rows: [
+                {
+                    id: "product_single_bottle",
+                    title: "Single Bottle", // Max 24 chars
+                    description: "AED 7 + AED 15 deposit. Premium 5-gallon water." // Max 72 chars
+                }
+            ]
+        }
+    ];
+    
+    return {
+        message: null,
+        buttons: null,
+        listData: {
+            header: "PREMIUM WATER DELIVERY",
+            body: "Choose your water delivery package. Coupon books offer the best value with free bonus bottles!",
+            buttonText: "View Products",
+            footer: "Cash on delivery",
+            sections: sections
+        }
+    };
+}
+
+// Keep old text-based function for fallback
 function generateProductList() {
     const message = `PRODUCT CATALOG
 
@@ -873,7 +1001,16 @@ async function handleTextMessage(messageBody, session) {
             return await handleRegisteredCustomerMessage(text, session);
             
         case 'viewing_products':
-            return await handleProductSelection(text, session);
+            // Handle product selection by number or show list again
+            if (text === '1' || text === '2' || text === '3' || text.includes('coupon') || text.includes('single')) {
+                return await handleProductSelectionByNumber(text, session);
+            } else if (text.includes('menu') || text.includes('back')) {
+                session.state = 'registered';
+                return generateMainMenu(session);
+            } else {
+                // Show list again
+                return generateProductListMessage();
+            }
             
         case 'confirming_order':
             return await handleOrderConfirmation(text, session);
@@ -915,7 +1052,7 @@ async function handleRegisteredCustomerMessage(text, session) {
     // Product-related keywords
     if (text.includes('product') || text.includes('view') || text.includes('order') || text.includes('buy') || text.includes('water') || text.includes('bottle')) {
         session.state = 'viewing_products';
-        return generateProductList();
+        return generateProductListMessage();
     }
     
     // Account-related
@@ -933,18 +1070,18 @@ async function handleRegisteredCustomerMessage(text, session) {
         return generateMainMenu(session);
     }
     
-    // Check if it's a product number
+    // Check if it's a product number (fallback for text input)
     if (text === '1' || text === '2' || text === '3') {
         session.state = 'viewing_products';
-        return await handleProductSelection(text, session);
+        return await handleProductSelectionByNumber(text, session);
     }
     
     // Default: show menu for any unrecognized message
     return generateMainMenu(session);
 }
 
-// Handle product selection from list
-async function handleProductSelection(text, session) {
+// Handle product selection by number (fallback)
+async function handleProductSelectionByNumber(text, session) {
     let selectedProduct = null;
     
     if (text === '1' || text.includes('10')) {
@@ -953,19 +1090,40 @@ async function handleProductSelection(text, session) {
         selectedProduct = PRODUCTS.coupon_100_40;
     } else if (text === '3' || text.includes('single')) {
         selectedProduct = PRODUCTS.single_bottle;
-    } else if (text.includes('menu') || text.includes('back')) {
-        session.state = 'registered';
-        return generateMainMenu(session);
-    } else {
-        return {
-            message: "Please reply with 1, 2, or 3 to select a product, or type 'menu' to go back.",
-            buttons: null
-        };
     }
     
-    session.currentOrder = selectedProduct;
-    session.state = 'confirming_order';
-    return generateOrderConfirmation(session);
+    if (selectedProduct) {
+        session.currentOrder = selectedProduct;
+        session.state = 'confirming_order';
+        return generateOrderConfirmation(session);
+    }
+    
+    return generateProductListMessage();
+}
+
+// Update customer in ERPNext
+async function updateCustomerInERP(customerName, updateData) {
+    try {
+        const response = await axios.put(
+            `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        return { success: true, data: response.data.data };
+        
+    } catch (error) {
+        console.error('Error updating customer:', error.response?.data || error.message);
+        return {
+            success: false,
+            error: error.response?.data?.message || 'Failed to update customer'
+        };
+    }
 }
 
 // Handle order confirmations
@@ -1144,7 +1302,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Bot v11.0 - List Products</title>
+        <title>WhatsApp Bot v12.0 - Interactive Lists</title>
         <style>
             body { font-family: Arial; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
@@ -1156,18 +1314,24 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v11.0</h1>
+            <h1>WhatsApp Water Delivery Bot v12.0</h1>
             <div class="status">
                 <h2>Status: <span class="active">ACTIVE</span></h2>
-                <p><strong>Version:</strong> 11.0.0-List-Based-Products</p>
+                <p><strong>Version:</strong> 12.0.0-Interactive-Lists</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
             </div>
             <h3>KEY FEATURES:</h3>
-            <div class="feature">Products shown as numbered list (no buttons)</div>
-            <div class="feature">Navigation uses buttons (max 3)</div>
-            <div class="feature">Workflow: Lead ? Customer after first order</div>
-            <div class="feature">New vs Existing customer detection</div>
-            <div class="feature">Missing info capture and update</div>
+            <div class="feature">? WhatsApp Interactive List for products (native UI)</div>
+            <div class="feature">? Organized sections: "Coupon Books" and "Single Purchase"</div>
+            <div class="feature">? Beautiful product cards with descriptions</div>
+            <div class="feature">? Navigation buttons for menu (max 3)</div>
+            <div class="feature">? Lead ? Customer workflow after first order</div>
+            <div class="feature">? Complete customer registration flow</div>
+            <h3>INTERACTIVE LIST STRUCTURE:</h3>
+            <div class="feature">Header: "PREMIUM WATER DELIVERY"</div>
+            <div class="feature">Section 1: Coupon Books (10+1 and 100+40)</div>
+            <div class="feature">Section 2: Single Purchase</div>
+            <div class="feature">Footer: "Cash on delivery"</div>
         </div>
     </body>
     </html>
