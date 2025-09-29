@@ -776,19 +776,32 @@ async function handleLocationMessage(message, session) {
     session.registrationData.longitude = locationData.longitude;
     session.registrationData.phoneNumber = session.phoneNumber;
     
-    // Update customer with location
+    // Update customer with full information
     if (session.customerInfo) {
-        await updateCustomerToFull(session.customerInfo.name, session.registrationData);
-        session.state = 'registered';
+        const updateResult = await updateCustomerToFull(session.customerInfo.name, session.registrationData);
         
-        const mainMenu = generateMainMenu(session);
-        return {
-            message: `Location confirmed: ${validation.city.toUpperCase()}\n\n${mainMenu.message}`,
-            buttons: mainMenu.buttons
-        };
+        if (updateResult.success) {
+            // Refresh customer info
+            session.customerInfo = await getCustomerDetails(session.customerInfo.name);
+            session.state = 'registered';
+            
+            const mainMenu = generateMainMenu(session);
+            return {
+                message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile has been updated successfully!\n\n${mainMenu.message}`,
+                buttons: mainMenu.buttons
+            };
+        } else {
+            return {
+                message: `Error updating your profile. Please contact support.\n\nError: ${updateResult.error}`,
+                buttons: null
+            };
+        }
     }
     
-    return { message: 'Location saved. Please continue with registration.', buttons: null };
+    return { 
+        message: 'Error: Customer information not found. Please restart registration by typing "start".',
+        buttons: null 
+    };
 }
 
 // Handle text messages
@@ -865,27 +878,58 @@ async function handleTextMessage(messageBody, session) {
         case 'confirming_order':
             return await handleOrderConfirmation(text, session);
             
+        case 'updating_missing_info':
+            const updateData = { customer_name: messageBody.trim() };
+            const updateResult = await updateCustomerInERP(session.customerInfo.name, updateData);
+            
+            if (updateResult.success) {
+                session.state = 'registered';
+                session.customerInfo.customer_name = messageBody.trim();
+                const mainMenu = generateMainMenu(session);
+                return {
+                    message: `Your name has been updated!\n\n${mainMenu.message}`,
+                    buttons: mainMenu.buttons
+                };
+            } else {
+                return {
+                    message: `Error updating your information. Please try again.\n\nError: ${updateResult.error}`,
+                    buttons: null
+                };
+            }
+            
         default:
-            return { message: "I didn't understand that. Please try again.", buttons: null };
+            // Fallback for any unhandled states
+            console.log(`Unhandled state: ${session.state}, resetting to registered`);
+            session.state = 'registered';
+            return generateMainMenu(session);
     }
 }
 
 // Handle registered customer messages
 async function handleRegisteredCustomerMessage(text, session) {
-    if (text.includes('product') || text.includes('view') || text.includes('order') || text.includes('buy')) {
+    // Greetings or casual messages
+    if (text.match(/^(hi|hello|hey|hii|helo|start)$/i)) {
+        return generateMainMenu(session);
+    }
+    
+    // Product-related keywords
+    if (text.includes('product') || text.includes('view') || text.includes('order') || text.includes('buy') || text.includes('water') || text.includes('bottle')) {
         session.state = 'viewing_products';
         return generateProductList();
     }
     
-    if (text.includes('account') || text.includes('profile')) {
+    // Account-related
+    if (text.includes('account') || text.includes('profile') || text.includes('info')) {
         return await generateAccountInfo(session);
     }
     
-    if (text.includes('support') || text.includes('help')) {
+    // Support-related
+    if (text.includes('support') || text.includes('help') || text.includes('contact')) {
         return generateSupportInfo();
     }
     
-    if (text.includes('menu')) {
+    // Menu request
+    if (text.includes('menu') || text.includes('back') || text.includes('main')) {
         return generateMainMenu(session);
     }
     
@@ -895,6 +939,7 @@ async function handleRegisteredCustomerMessage(text, session) {
         return await handleProductSelection(text, session);
     }
     
+    // Default: show menu for any unrecognized message
     return generateMainMenu(session);
 }
 
