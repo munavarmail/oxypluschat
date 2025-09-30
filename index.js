@@ -87,15 +87,13 @@ const WELCOME_MESSAGE = `WELCOME TO PREMIUM WATER DELIVERY!
 
 Hi! I'm your personal water delivery assistant.
 
-Are you a new customer or have you ordered from us before?
+To get started, I need to set up your delivery profile. This is a one-time setup that will make future orders super quick!
 
-Reply:
-1 - New Customer
-2 - Existing Customer`;
+Please provide your details:
+What's your name?`;
 
 // Registration states
 const REGISTRATION_STATES = {
-    ASKING_CUSTOMER_TYPE: 'asking_customer_type',
     COLLECTING_NAME: 'collecting_name',
     COLLECTING_BUILDING: 'collecting_building',
     COLLECTING_AREA: 'collecting_area',
@@ -104,9 +102,8 @@ const REGISTRATION_STATES = {
     REGISTRATION_COMPLETE: 'registration_complete'
 };
 
-// Customer status types
+// Customer status types (kept for compatibility but won't use Lead)
 const CUSTOMER_STATUS = {
-    LEAD: 'Lead',
     CUSTOMER: 'Customer'
 };
 
@@ -207,22 +204,30 @@ function findMissingFields(customerData) {
     return missing;
 }
 
-// Create customer as Lead
-async function createCustomerAsLead(phoneNumber) {
+// Create customer with full information (no Lead status)
+async function createCustomerInERP(registrationData) {
     try {
         const customerData = {
             doctype: 'Customer',
-            customer_name: `Lead ${phoneNumber}`,
-            mobile_no: phoneNumber,
+            customer_name: registrationData.name,
+            mobile_no: registrationData.phoneNumber,
             customer_type: 'Individual',
             customer_group: 'Individual',
             territory: '',
             custom_payment_mode: 'Cash',
-            custom_customer_status: CUSTOMER_STATUS.LEAD,
-            custom_coupon_bottle: 0
+            custom_customer_status: CUSTOMER_STATUS.CUSTOMER,
+            custom_coupon_bottle: 0,
+            // Delivery days
+            custom_saturday: 0,
+            custom_sunday: 0,
+            custom_monday: 0,
+            custom_tuesday: 1,
+            custom_wednesday: 0,
+            custom_thursday: 0,
+            custom_friday: 0
         };
         
-        console.log('Creating customer as Lead:', customerData);
+        console.log('Creating customer with full data:', customerData);
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Customer`,
@@ -235,7 +240,15 @@ async function createCustomerAsLead(phoneNumber) {
             }
         );
         
-        console.log('Lead created successfully:', response.data.data.name);
+        console.log('Customer created successfully:', response.data.data.name);
+        
+        // Create address with GPS coordinates
+        if (registrationData.latitude && registrationData.longitude) {
+            await createAddressRecord(response.data.data.name, registrationData);
+        }
+        
+        // Create contact
+        await createContactRecord(response.data.data.name, registrationData);
         
         return {
             success: true,
@@ -244,50 +257,10 @@ async function createCustomerAsLead(phoneNumber) {
         };
         
     } catch (error) {
-        console.error('Error creating lead:', error.response?.data || error.message);
+        console.error('Error creating customer:', error.response?.data || error.message);
         return {
             success: false,
-            error: error.response?.data?.message || 'Failed to create lead'
-        };
-    }
-}
-
-// Update customer with full information and change status to Customer
-async function updateCustomerToFull(customerName, registrationData) {
-    try {
-        const updateData = {
-            customer_name: registrationData.name,
-            custom_customer_status: CUSTOMER_STATUS.CUSTOMER
-        };
-        
-        const response = await axios.put(
-            `${ERPNEXT_URL}/api/resource/Customer/${customerName}`,
-            updateData,
-            {
-                headers: {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        
-        console.log('Customer updated from Lead to Customer:', customerName);
-        
-        // Create address if we have GPS
-        if (registrationData.latitude && registrationData.longitude) {
-            await createAddressRecord(customerName, registrationData);
-        }
-        
-        // Create contact
-        await createContactRecord(customerName, registrationData);
-        
-        return { success: true, data: response.data.data };
-        
-    } catch (error) {
-        console.error('Error updating customer:', error.response?.data || error.message);
-        return {
-            success: false,
-            error: error.response?.data?.message || 'Failed to update customer'
+            error: error.response?.data?.message || 'Failed to create customer'
         };
     }
 }
@@ -658,19 +631,20 @@ async function handleIncomingMessage(message, phoneNumberId) {
         response = result.message;
         buttons = result.buttons;
     }
-    // WORKFLOW: Check if customer exists in DB
+    // WORKFLOW: Check if customer exists in DB (automatic detection)
     else if (session.state === 'new_user') {
         const customerCheck = await checkExistingCustomer(phoneNumber);
         
         if (customerCheck.exists) {
             // Customer exists in DB
             session.customerInfo = customerCheck.customerData;
-            session.customerStatus = customerCheck.customerData.custom_customer_status || CUSTOMER_STATUS.CUSTOMER;
+            session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
             
             if (customerCheck.missingFields.length > 0) {
                 // Info is missing - capture it
                 session.state = 'updating_missing_info';
-                response = `Welcome back!\n\nI need to update some information in your account. What's your full name?`;
+                session.missingFieldsList = customerCheck.missingFields;
+                response = `Welcome back!\n\nYour account is incomplete. We need the following information:\n${customerCheck.missingFields.join(', ')}\n\nLet's start with your full name:`;
             } else {
                 // All info is captured - proceed normally
                 session.state = 'registered';
@@ -679,8 +653,8 @@ async function handleIncomingMessage(message, phoneNumberId) {
                 buttons = result.buttons;
             }
         } else {
-            // Customer NOT in DB - ask if new or existing
-            session.state = REGISTRATION_STATES.ASKING_CUSTOMER_TYPE;
+            // Customer NOT in DB - start registration directly
+            session.state = REGISTRATION_STATES.COLLECTING_NAME;
             response = WELCOME_MESSAGE;
         }
     }
@@ -937,32 +911,26 @@ async function handleLocationMessage(message, session) {
     session.registrationData.longitude = locationData.longitude;
     session.registrationData.phoneNumber = session.phoneNumber;
     
-    // Update customer with full information
-    if (session.customerInfo) {
-        const updateResult = await updateCustomerToFull(session.customerInfo.name, session.registrationData);
-        
-        if (updateResult.success) {
-            // Refresh customer info
-            session.customerInfo = await getCustomerDetails(session.customerInfo.name);
-            session.state = 'registered';
-            
-            const mainMenu = generateMainMenu(session);
-            return {
-                message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile has been updated successfully!\n\n${mainMenu.message}`,
-                buttons: mainMenu.buttons
-            };
-        } else {
-            return {
-                message: `Error updating your profile. Please contact support.\n\nError: ${updateResult.error}`,
-                buttons: null
-            };
-        }
-    }
+    // Create customer with full information
+    const customerResult = await createCustomerInERP(session.registrationData);
     
-    return { 
-        message: 'Error: Customer information not found. Please restart registration by typing "start".',
-        buttons: null 
-    };
+    if (customerResult.success) {
+        // Set customer info and state
+        session.customerInfo = customerResult.data;
+        session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
+        session.state = 'registered';
+        
+        const mainMenu = generateMainMenu(session);
+        return {
+            message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile has been created successfully!\n\n${mainMenu.message}`,
+            buttons: mainMenu.buttons
+        };
+    } else {
+        return {
+            message: `Error creating your profile. Please contact support.\n\nError: ${customerResult.error}`,
+            buttons: null
+        };
+    }
 }
 
 // Handle text messages
@@ -970,40 +938,6 @@ async function handleTextMessage(messageBody, session) {
     const text = messageBody.toLowerCase().trim();
     
     switch (session.state) {
-        case REGISTRATION_STATES.ASKING_CUSTOMER_TYPE:
-            if (text.includes('1') || text.includes('new')) {
-                // NEW CUSTOMER PATH: Create as Lead
-                const leadResult = await createCustomerAsLead(session.phoneNumber);
-                
-                if (leadResult.success) {
-                    session.customerInfo = leadResult.data;
-                    session.customerStatus = CUSTOMER_STATUS.LEAD;
-                    session.state = REGISTRATION_STATES.COLLECTING_NAME;
-                    
-                    return { 
-                        message: "Welcome new customer!\n\nLet's set up your delivery profile.\n\nWhat's your full name?",
-                        buttons: null
-                    };
-                } else {
-                    return {
-                        message: `Error setting up your profile. Please try again.\n\nError: ${leadResult.error}`,
-                        buttons: null
-                    };
-                }
-            } else if (text.includes('2') || text.includes('exist') || text.includes('old')) {
-                // EXISTING CUSTOMER PATH: Capture info
-                session.state = REGISTRATION_STATES.COLLECTING_NAME;
-                return { 
-                    message: "Welcome back! Let's update your information.\n\nWhat's your full name?",
-                    buttons: null
-                };
-            } else {
-                return {
-                    message: "Please reply with:\n1 - New Customer\n2 - Existing Customer",
-                    buttons: null
-                };
-            }
-            
         case REGISTRATION_STATES.COLLECTING_NAME:
             if (text.length < 2) {
                 return { message: "Please provide your full name (at least 2 characters).", buttons: null };
@@ -1035,7 +969,7 @@ async function handleTextMessage(messageBody, session) {
             
         case 'viewing_products':
             // Handle product selection by number or show list again
-            if (text === '1' || text === '2' || text === '3' || text.includes('coupon') || text.includes('single')) {
+            if (text === '1' || text === '2' || text === '3' || text === '4' || text === '5' || text.includes('coupon') || text.includes('cooler')) {
                 return await handleProductSelectionByNumber(text, session);
             } else if (text.includes('menu') || text.includes('back')) {
                 session.state = 'registered';
@@ -1049,17 +983,31 @@ async function handleTextMessage(messageBody, session) {
             return await handleOrderConfirmation(text, session);
             
         case 'updating_missing_info':
+            // Update the customer name
             const updateData = { customer_name: messageBody.trim() };
             const updateResult = await updateCustomerInERP(session.customerInfo.name, updateData);
             
             if (updateResult.success) {
-                session.state = 'registered';
                 session.customerInfo.customer_name = messageBody.trim();
-                const mainMenu = generateMainMenu(session);
-                return {
-                    message: `Your name has been updated!\n\n${mainMenu.message}`,
-                    buttons: mainMenu.buttons
-                };
+                
+                // Check if there are more missing fields
+                const stillMissing = findMissingFields(session.customerInfo);
+                
+                if (stillMissing.length > 0) {
+                    // Still have missing fields, continue updating
+                    return {
+                        message: `Great! Now we need: ${stillMissing.join(', ')}\n\nPlease provide the next information.`,
+                        buttons: null
+                    };
+                } else {
+                    // All info collected, proceed to menu
+                    session.state = 'registered';
+                    const mainMenu = generateMainMenu(session);
+                    return {
+                        message: `Your information has been updated!\n\n${mainMenu.message}`,
+                        buttons: mainMenu.buttons
+                    };
+                }
             } else {
                 return {
                     message: `Error updating your information. Please try again.\n\nError: ${updateResult.error}`,
@@ -1069,9 +1017,30 @@ async function handleTextMessage(messageBody, session) {
             
         default:
             // Fallback for any unhandled states
-            console.log(`Unhandled state: ${session.state}, resetting to registered`);
-            session.state = 'registered';
-            return generateMainMenu(session);
+            console.log(`Unhandled state: ${session.state}, resetting to new_user`);
+            session.state = 'new_user';
+            
+            // Re-check customer existence
+            const customerCheck = await checkExistingCustomer(session.phoneNumber);
+            
+            if (customerCheck.exists) {
+                session.customerInfo = customerCheck.customerData;
+                session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
+                
+                if (customerCheck.missingFields.length > 0) {
+                    session.state = 'updating_missing_info';
+                    return {
+                        message: `Welcome back! Your account needs some information. What's your full name?`,
+                        buttons: null
+                    };
+                } else {
+                    session.state = 'registered';
+                    return generateMainMenu(session);
+                }
+            } else {
+                session.state = REGISTRATION_STATES.COLLECTING_NAME;
+                return { message: WELCOME_MESSAGE, buttons: null };
+            }
     }
 }
 
@@ -1104,7 +1073,7 @@ async function handleRegisteredCustomerMessage(text, session) {
     }
     
     // Check if it's a product number (fallback for text input)
-    if (text === '1' || text === '2' || text === '3') {
+    if (text === '1' || text === '2' || text === '3' || text === '4' || text === '5') {
         session.state = 'viewing_products';
         return await handleProductSelectionByNumber(text, session);
     }
@@ -1117,12 +1086,16 @@ async function handleRegisteredCustomerMessage(text, session) {
 async function handleProductSelectionByNumber(text, session) {
     let selectedProduct = null;
     
-    if (text === '1' || text.includes('10')) {
+    if (text === '1' || text.includes('10+1')) {
         selectedProduct = PRODUCTS.coupon_10_1;
-    } else if (text === '2' || text.includes('100')) {
+    } else if (text === '2' || text.includes('25+5')) {
+        selectedProduct = PRODUCTS.coupon_25_5;
+    } else if (text === '3' || text.includes('30+7')) {
+        selectedProduct = PRODUCTS.coupon_30_7;
+    } else if (text === '4' || text.includes('100+40')) {
         selectedProduct = PRODUCTS.coupon_100_40;
-    } else if (text === '3' || text.includes('single')) {
-        selectedProduct = PRODUCTS.single_bottle;
+    } else if (text === '5' || text.includes('cooler') || text.includes('100+cooler')) {
+        selectedProduct = PRODUCTS.coupon_100_cooler;
     }
     
     if (selectedProduct) {
@@ -1162,13 +1135,6 @@ async function updateCustomerInERP(customerName, updateData) {
 // Handle order confirmations
 async function handleOrderConfirmation(text, session) {
     if (text.includes('yes') || text.includes('confirm')) {
-        // If this is their first order and they're a Lead, update to Customer
-        if (session.customerStatus === CUSTOMER_STATUS.LEAD && !session.hasPlacedOrder) {
-            await updateCustomerToFull(session.customerInfo.name, session.registrationData);
-            session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
-            session.hasPlacedOrder = true;
-        }
-        
         const orderResult = await createSalesOrder(
             session.customerInfo.name, 
             session.currentOrder,
@@ -1225,11 +1191,9 @@ ${mainMenu.message}`,
 // Generate account info
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
-    const statusDisplay = session.customerStatus === CUSTOMER_STATUS.LEAD ? 'New Customer (Lead)' : 'Active Customer';
     
     const message = `YOUR ACCOUNT
 
-Status: ${statusDisplay}
 Phone: ${customer.mobile_no}
 Name: ${customer.customer_name || 'Not provided'}
 Member Since: ${new Date(customer.creation).toLocaleDateString()}
@@ -1335,36 +1299,49 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Bot v12.0 - Interactive Lists</title>
+        <title>WhatsApp Bot v13.0 - Streamlined Flow</title>
         <style>
             body { font-family: Arial; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
             .status { padding: 20px; background: #e8f5e8; border-radius: 8px; margin: 20px 0; }
             .feature { margin: 15px 0; padding: 15px; background: #f8f8f8; border-radius: 6px; border-left: 4px solid #28a745; }
+            .product { margin: 10px 0; padding: 12px; background: #e3f2fd; border-radius: 6px; }
+            .workflow { margin: 10px 0; padding: 12px; background: #fff3e0; border-radius: 6px; }
             .active { color: #28a745; font-weight: bold; }
             h1 { color: #333; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v12.0</h1>
+            <h1>WhatsApp Water Delivery Bot v13.0</h1>
             <div class="status">
                 <h2>Status: <span class="active">ACTIVE</span></h2>
-                <p><strong>Version:</strong> 12.0.0-Interactive-Lists</p>
+                <p><strong>Version:</strong> 13.0.0-Streamlined-Flow</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
+                <p><strong>Total Products:</strong> 5</p>
             </div>
+            
+            <h3>WORKFLOW (AUTOMATIC):</h3>
+            <div class="workflow">1. Customer messages ? Auto-check if exists in DB</div>
+            <div class="workflow">2. If exists with complete info ? Show menu directly</div>
+            <div class="workflow">3. If exists with missing info ? Prompt to complete</div>
+            <div class="workflow">4. If NOT exists ? Start registration directly</div>
+            <div class="workflow">5. NO Lead creation - only complete customers</div>
+            
+            <h3>AVAILABLE PRODUCTS:</h3>
+            <div class="product">1. 10+1 Coupon Book - AED 65 (11 bottles)</div>
+            <div class="product">2. 25+5 Coupon Book - AED 175 (30 bottles)</div>
+            <div class="product">3. 30+7 Coupon Book - AED 210 (37 bottles)</div>
+            <div class="product">4. 100+40 Coupon Book - AED 700 (140 bottles)</div>
+            <div class="product">5. 100 Bottles + Cooler - AED 800 (100 bottles + FREE cooler)</div>
+            
             <h3>KEY FEATURES:</h3>
-            <div class="feature">? WhatsApp Interactive List for products (native UI)</div>
-            <div class="feature">? Organized sections: "Coupon Books" and "Single Purchase"</div>
-            <div class="feature">? Beautiful product cards with descriptions</div>
-            <div class="feature">? Navigation buttons for menu (max 3)</div>
-            <div class="feature">? Lead ? Customer workflow after first order</div>
-            <div class="feature">? Complete customer registration flow</div>
-            <h3>INTERACTIVE LIST STRUCTURE:</h3>
-            <div class="feature">Header: "PREMIUM WATER DELIVERY"</div>
-            <div class="feature">Section 1: Coupon Books (10+1 and 100+40)</div>
-            <div class="feature">Section 2: Single Purchase</div>
-            <div class="feature">Footer: "Cash on delivery"</div>
+            <div class="feature">? Automatic customer detection (no questions)</div>
+            <div class="feature">? WhatsApp Interactive List UI for products</div>
+            <div class="feature">? Direct to menu for existing customers</div>
+            <div class="feature">? Smart missing field detection</div>
+            <div class="feature">? No Lead status - only full customers</div>
+            <div class="feature">? Text fallback support (type 1-5)</div>
         </div>
     </body>
     </html>
