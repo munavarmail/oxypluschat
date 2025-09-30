@@ -632,10 +632,16 @@ async function handleIncomingMessage(message, phoneNumberId) {
             session.customerInfo = customerCheck.customerData;
             
             if (customerCheck.missingFields.length > 0) {
-                // Info is missing - capture it
-                session.state = 'updating_missing_info';
-                session.missingFieldsList = customerCheck.missingFields;
-                response = `Welcome back!\n\nYour account is incomplete. We need the following information:\n${customerCheck.missingFields.join(', ')}\n\nLet's start with your full name:`;
+                // Info is missing - show what we have and what's needed
+                const existingInfo = [];
+                if (session.customerInfo.customer_name) existingInfo.push(`Name: ${session.customerInfo.customer_name}`);
+                if (session.customerInfo.mobile_no) existingInfo.push(`Phone: ${session.customerInfo.mobile_no}`);
+                
+                const existingText = existingInfo.length > 0 ? `\n\nExisting Information:\n${existingInfo.join('\n')}` : '';
+                
+                // Start collecting missing information
+                session.state = 'updating_missing_name';
+                response = `Welcome back!${existingText}\n\nWe need to complete your profile. What's your full name?`;
             } else {
                 // All info is captured - proceed normally
                 session.state = 'registered';
@@ -902,24 +908,37 @@ async function handleLocationMessage(message, session) {
     session.registrationData.longitude = locationData.longitude;
     session.registrationData.phoneNumber = session.phoneNumber;
     
-    // Create customer with full information
-    const customerResult = await createCustomerInERP(session.registrationData);
-    
-    if (customerResult.success) {
-        // Set customer info and state
-        session.customerInfo = customerResult.data;
-        session.state = 'registered';
+    // Check if this is for a new customer or updating existing customer
+    if (session.state === 'updating_missing_location') {
+        // Updating existing customer - create/update address
+        await createAddressRecord(session.customerInfo.name, session.registrationData);
         
+        session.state = 'registered';
         const mainMenu = generateMainMenu(session);
         return {
-            message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile has been created successfully!\n\n${mainMenu.message}`,
+            message: `Address Updated!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile is now complete!\n\n${mainMenu.message}`,
             buttons: mainMenu.buttons
         };
     } else {
-        return {
-            message: `Error creating your profile. Please contact support.\n\nError: ${customerResult.error}`,
-            buttons: null
-        };
+        // New customer registration
+        const customerResult = await createCustomerInERP(session.registrationData);
+        
+        if (customerResult.success) {
+            // Set customer info and state
+            session.customerInfo = customerResult.data;
+            session.state = 'registered';
+            
+            const mainMenu = generateMainMenu(session);
+            return {
+                message: `Registration Complete!\n\nLocation confirmed: ${validation.city.toUpperCase()}\nYour profile has been created successfully!\n\n${mainMenu.message}`,
+                buttons: mainMenu.buttons
+            };
+        } else {
+            return {
+                message: `Error creating your profile. Please contact support.\n\nError: ${customerResult.error}`,
+                buttons: null
+            };
+        }
     }
 }
 
@@ -954,6 +973,61 @@ async function handleTextMessage(messageBody, session) {
                 buttons: null
             };
             
+        case 'updating_missing_name':
+            if (text.length < 2) {
+                return { message: "Please provide your full name (at least 2 characters).", buttons: null };
+            }
+            
+            // Update customer name
+            const updateNameResult = await updateCustomerInERP(session.customerInfo.name, { 
+                customer_name: messageBody.trim() 
+            });
+            
+            if (updateNameResult.success) {
+                session.customerInfo.customer_name = messageBody.trim();
+                
+                // Check if address exists
+                const addresses = await getCustomerAddresses(session.customerInfo.name);
+                
+                if (!addresses || addresses.length === 0) {
+                    // No address, collect it
+                    session.registrationData = { phoneNumber: session.phoneNumber, name: messageBody.trim() };
+                    session.state = 'updating_missing_building';
+                    return { message: "Great! Now let's complete your address.\n\nWhat's your building name or number?", buttons: null };
+                } else {
+                    // Address exists, go to menu
+                    session.state = 'registered';
+                    const mainMenu = generateMainMenu(session);
+                    return {
+                        message: `Your profile is now complete!\n\n${mainMenu.message}`,
+                        buttons: mainMenu.buttons
+                    };
+                }
+            } else {
+                return {
+                    message: `Error updating your information. Please try again.\n\nError: ${updateNameResult.error}`,
+                    buttons: null
+                };
+            }
+            
+        case 'updating_missing_building':
+            session.registrationData.buildingName = messageBody.trim();
+            session.state = 'updating_missing_area';
+            return { message: "What area/neighborhood are you in?", buttons: null };
+            
+        case 'updating_missing_area':
+            session.registrationData.area = messageBody.trim();
+            session.state = 'updating_missing_flat';
+            return { message: "What's your flat/apartment number?", buttons: null };
+            
+        case 'updating_missing_flat':
+            session.registrationData.flatNo = messageBody.trim();
+            session.state = 'updating_missing_location';
+            return { 
+                message: `Almost done!\n\nPlease share your GPS location using the attachment button.`,
+                buttons: null
+            };
+            
         case 'registered':
             return await handleRegisteredCustomerMessage(text, session);
             
@@ -972,39 +1046,6 @@ async function handleTextMessage(messageBody, session) {
         case 'confirming_order':
             return await handleOrderConfirmation(text, session);
             
-        case 'updating_missing_info':
-            // Update the customer name
-            const updateData = { customer_name: messageBody.trim() };
-            const updateResult = await updateCustomerInERP(session.customerInfo.name, updateData);
-            
-            if (updateResult.success) {
-                session.customerInfo.customer_name = messageBody.trim();
-                
-                // Check if there are more missing fields
-                const stillMissing = findMissingFields(session.customerInfo);
-                
-                if (stillMissing.length > 0) {
-                    // Still have missing fields, continue updating
-                    return {
-                        message: `Great! Now we need: ${stillMissing.join(', ')}\n\nPlease provide the next information.`,
-                        buttons: null
-                    };
-                } else {
-                    // All info collected, proceed to menu
-                    session.state = 'registered';
-                    const mainMenu = generateMainMenu(session);
-                    return {
-                        message: `Your information has been updated!\n\n${mainMenu.message}`,
-                        buttons: mainMenu.buttons
-                    };
-                }
-            } else {
-                return {
-                    message: `Error updating your information. Please try again.\n\nError: ${updateResult.error}`,
-                    buttons: null
-                };
-            }
-            
         default:
             // Fallback for any unhandled states
             console.log(`Unhandled state: ${session.state}, resetting to new_user`);
@@ -1017,7 +1058,7 @@ async function handleTextMessage(messageBody, session) {
                 session.customerInfo = customerCheck.customerData;
                 
                 if (customerCheck.missingFields.length > 0) {
-                    session.state = 'updating_missing_info';
+                    session.state = 'updating_missing_name';
                     return {
                         message: `Welcome back! Your account needs some information. What's your full name?`,
                         buttons: null
@@ -1094,6 +1135,33 @@ async function handleProductSelectionByNumber(text, session) {
     }
     
     return generateProductListMessage();
+}
+
+// Get customer addresses
+async function getCustomerAddresses(customerName) {
+    try {
+        const response = await axios.get(
+            `${ERPNEXT_URL}/api/resource/Address`,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    filters: JSON.stringify([
+                        ['Dynamic Link', 'link_doctype', '=', 'Customer'],
+                        ['Dynamic Link', 'link_name', '=', customerName]
+                    ]),
+                    fields: JSON.stringify(['name', 'address_line1', 'address_line2', 'city'])
+                }
+            }
+        );
+        
+        return response.data.data || [];
+    } catch (error) {
+        console.error('Error getting customer addresses:', error.response?.data || error.message);
+        return [];
+    }
 }
 
 // Update customer in ERPNext
