@@ -102,11 +102,6 @@ const REGISTRATION_STATES = {
     REGISTRATION_COMPLETE: 'registration_complete'
 };
 
-// Customer status types (kept for compatibility but won't use Lead)
-const CUSTOMER_STATUS = {
-    CUSTOMER: 'Customer'
-};
-
 // Create user session
 function createUserSession(phoneNumber) {
     return {
@@ -114,11 +109,9 @@ function createUserSession(phoneNumber) {
         state: 'new_user',
         registrationData: {},
         customerInfo: null,
-        customerStatus: null, // 'Lead' or 'Customer'
         currentOrder: null,
         lastActivity: Date.now(),
-        conversationHistory: [],
-        hasPlacedOrder: false
+        conversationHistory: []
     };
 }
 
@@ -143,7 +136,7 @@ async function checkExistingCustomer(phoneNumber) {
             },
             params: {
                 filters: JSON.stringify([['mobile_no', '=', phoneNumber]]),
-                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'custom_customer_status'])
+                fields: JSON.stringify(['name', 'customer_name', 'mobile_no', 'creation'])
             }
         });
 
@@ -215,7 +208,6 @@ async function createCustomerInERP(registrationData) {
             customer_group: 'Individual',
             territory: '',
             custom_payment_mode: 'Cash',
-            custom_customer_status: CUSTOMER_STATUS.CUSTOMER,
             custom_coupon_bottle: 0,
             // Delivery days
             custom_saturday: 0,
@@ -638,7 +630,6 @@ async function handleIncomingMessage(message, phoneNumberId) {
         if (customerCheck.exists) {
             // Customer exists in DB
             session.customerInfo = customerCheck.customerData;
-            session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
             
             if (customerCheck.missingFields.length > 0) {
                 // Info is missing - capture it
@@ -917,7 +908,6 @@ async function handleLocationMessage(message, session) {
     if (customerResult.success) {
         // Set customer info and state
         session.customerInfo = customerResult.data;
-        session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
         session.state = 'registered';
         
         const mainMenu = generateMainMenu(session);
@@ -1025,7 +1015,6 @@ async function handleTextMessage(messageBody, session) {
             
             if (customerCheck.exists) {
                 session.customerInfo = customerCheck.customerData;
-                session.customerStatus = CUSTOMER_STATUS.CUSTOMER;
                 
                 if (customerCheck.missingFields.length > 0) {
                     session.state = 'updating_missing_info';
