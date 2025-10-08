@@ -260,26 +260,57 @@ async function createCustomerInERP(registrationData) {
     }
 }
 
+function determineEmirate(area) {
+    if (!area) return 'Dubai';
+    
+    const areaLower = area.toLowerCase();
+    
+    if (areaLower.includes('ajman')) return 'Ajman';
+    if (areaLower.includes('sharjah')) return 'Sharjah';
+    if (areaLower.includes('dubai')) return 'Dubai';
+    if (areaLower.includes('qouz') || areaLower.includes('barsha')) return 'Dubai';
+    
+    // Default to Dubai
+    return 'Dubai';
+}
+
 // Create address record
 async function createAddressRecord(customerName, registrationData) {
     try {
+        // Determine emirate/city from area or use default
+        const emirate = determineEmirate(registrationData.area);
+        
         const addressData = {
             doctype: 'Address',
-            address_title: `${customerName} - Delivery`,
+            address_title: customerName,
             address_type: 'Billing',
-            address_line1: `${registrationData.buildingName || ''} ${registrationData.flatNo || ''}`.trim(),
-            address_line2: registrationData.area || '',
+            address_line1: registrationData.area || '',
+            city: registrationData.buildingName || 'VILLA',  // Use building as city
+            state: emirate,
+            emirate: emirate,
             country: 'United Arab Emirates',
+            phone: registrationData.phoneNumber || '',
+            // Custom fields for bottle tracking
+            custom_bottle_in_hand: 0,
+            custom_coupon_count: 0,
+            custom_cooler_in_hand: 0,
+            custom_bottle_per_recharge: 0,
+            custom_bottle_recharge_amount: 0,
+            is_primary_address: 1,
+            is_shipping_address: 1,
             links: [{
                 link_doctype: 'Customer',
                 link_name: customerName
             }]
         };
         
+        // Add GPS coordinates if available
         if (registrationData.latitude && registrationData.longitude) {
             addressData.custom_latitude = registrationData.latitude;
             addressData.custom_longitude = registrationData.longitude;
         }
+        
+        console.log('Creating address with data:', addressData);
         
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Address`,
@@ -292,7 +323,7 @@ async function createAddressRecord(customerName, registrationData) {
             }
         );
         
-        console.log('Address created');
+        console.log('Address created successfully:', response.data.data.name);
         await updateCustomerPrimaryAddress(customerName, response.data.data.name);
         
         return response.data.data;
@@ -417,7 +448,25 @@ async function getCustomerAddresses(customerName) {
                         ['Dynamic Link', 'link_doctype', '=', 'Customer'],
                         ['Dynamic Link', 'link_name', '=', customerName]
                     ]),
-                    fields: JSON.stringify(['name', 'address_line1', 'address_line2', 'city'])
+                    fields: JSON.stringify([
+                        'name', 
+                        'address_title',
+                        'address_line1', 
+                        'address_line2',
+                        'city', 
+                        'state',
+                        'emirate',
+                        'country',
+                        'phone',
+                        'custom_bottle_in_hand',
+                        'custom_coupon_count',
+                        'custom_cooler_in_hand',
+                        'custom_bottle_per_recharge',
+                        'custom_bottle_recharge_amount',
+                        'custom_latitude',
+                        'custom_longitude',
+                        'is_primary_address'
+                    ])
                 }
             }
         );
@@ -429,6 +478,24 @@ async function getCustomerAddresses(customerName) {
     }
 }
 
+
+async function getFullAddressDetails(addressName) {
+    try {
+        const response = await axios.get(
+            `${ERPNEXT_URL}/api/resource/Address/${addressName}`,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        return response.data.data;
+    } catch (error) {
+        console.error('Error getting address details:', error.response?.data || error.message);
+        return null;
+    }
+}
 // Create sales order
 async function createSalesOrder(customerName, product, customerPhone) {
     try {
@@ -473,6 +540,32 @@ async function createSalesOrder(customerName, product, customerPhone) {
         
         console.log('Sales order created:', response.data.data.name);
         
+        // Update bottle inventory after successful order
+        // For coupon books, add to coupon count instead of bottle count
+        if (product.name.includes('Coupon')) {
+            await updateBottleInventory(customerName, 0, product.qty);
+        } else {
+            await updateBottleInventory(customerName, product.qty, 0);
+        }
+        
+        // If package includes cooler, update cooler count
+        if (product.name.includes('Cooler')) {
+            const addresses = await getCustomerAddresses(customerName);
+            if (addresses && addresses.length > 0) {
+                const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+                await axios.put(
+                    `${ERPNEXT_URL}/api/resource/Address/${primaryAddress.name}`,
+                    { custom_cooler_in_hand: 1 },
+                    {
+                        headers: {
+                            'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+            }
+        }
+        
         return {
             success: true,
             orderName: response.data.data.name,
@@ -486,6 +579,49 @@ async function createSalesOrder(customerName, product, customerPhone) {
             error: error.response?.data?.message || 'Failed to create order'
         };
     }
+}
+
+
+async function generateInventoryDetails(session) {
+    const customer = session.customerInfo;
+    const addresses = await getCustomerAddresses(customer.name);
+    
+    if (!addresses || addresses.length === 0) {
+        return {
+            message: "No inventory information available.\n\nPlace your first order to start tracking!",
+            buttons: [
+                { id: 'view_products', title: 'Order Now' },
+                { id: 'back_to_menu', title: 'Back' }
+            ]
+        };
+    }
+    
+    const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+    
+    const bottleInHand = primaryAddress.custom_bottle_in_hand || 0;
+    const couponCount = primaryAddress.custom_coupon_count || 0;
+    const coolerInHand = primaryAddress.custom_cooler_in_hand || 0;
+    
+    const message = `?? YOUR INVENTORY
+
+?? BOTTLES IN HAND: ${bottleInHand}
+${bottleInHand > 0 ? '(Ready for use)' : '(Need to reorder)'}
+
+?? COUPON BALANCE: ${couponCount}
+${couponCount > 0 ? '(Redeem for bottles)' : '(Purchase coupon book)'}
+
+?? COOLER: ${coolerInHand > 0 ? 'YES ?' : 'NO ?'}
+
+${bottleInHand < 5 ? '\n?? LOW STOCK - Consider reordering!' : ''}
+
+What would you like to do?`;
+    
+    const buttons = [
+        { id: 'view_products', title: 'Order More' },
+        { id: 'back_to_menu', title: 'Back' }
+    ];
+    
+    return { message, buttons };
 }
 
 // Extract location coordinates
@@ -788,21 +924,105 @@ How can we help you?`;
     return { message, buttons };
 }
 
-// Generate account info
+async function updateBottleInventory(customerName, bottlesToAdd, couponToAdd = 0) {
+    try {
+        // Get customer's primary address
+        const addresses = await getCustomerAddresses(customerName);
+        if (!addresses || addresses.length === 0) {
+            console.log('No address found for inventory update');
+            return { success: false, error: 'No address found' };
+        }
+        
+        const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+        
+        // Get full address details
+        const fullAddress = await getFullAddressDetails(primaryAddress.name);
+        if (!fullAddress) {
+            return { success: false, error: 'Could not fetch address details' };
+        }
+        
+        const currentBottles = fullAddress.custom_bottle_in_hand || 0;
+        const currentCoupons = fullAddress.custom_coupon_count || 0;
+        
+        // Update inventory
+        const updateData = {
+            custom_bottle_in_hand: currentBottles + bottlesToAdd,
+            custom_coupon_count: currentCoupons + couponToAdd
+        };
+        
+        const response = await axios.put(
+            `${ERPNEXT_URL}/api/resource/Address/${primaryAddress.name}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Inventory updated:', updateData);
+        return { 
+            success: true, 
+            newBottleCount: updateData.custom_bottle_in_hand,
+            newCouponCount: updateData.custom_coupon_count
+        };
+        
+    } catch (error) {
+        console.error('Error updating inventory:', error.response?.data || error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
     
+    // Get customer addresses with full details
+    const addresses = await getCustomerAddresses(customer.name);
+    
+    let addressInfo = 'Address: Not set';
+    let bottleInfo = '';
+    
+    if (addresses && addresses.length > 0) {
+        const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+        
+        // Build address display
+        const addressParts = [];
+        if (primaryAddress.city) addressParts.push(primaryAddress.city);
+        if (primaryAddress.address_line1) addressParts.push(primaryAddress.address_line1);
+        if (primaryAddress.emirate) addressParts.push(primaryAddress.emirate);
+        
+        addressInfo = `Address: ${addressParts.join(', ')}`;
+        
+        // Build bottle/coupon info
+        const bottleInHand = primaryAddress.custom_bottle_in_hand || 0;
+        const couponCount = primaryAddress.custom_coupon_count || 0;
+        const coolerInHand = primaryAddress.custom_cooler_in_hand || 0;
+        
+        bottleInfo = `\n\n?? YOUR INVENTORY:
+?? Bottles in Hand: ${bottleInHand}
+?? Coupon Balance: ${couponCount}
+?? Cooler: ${coolerInHand > 0 ? 'Yes' : 'No'}`;
+        
+        if (primaryAddress.phone) {
+            addressInfo += `\nPhone: ${primaryAddress.phone}`;
+        }
+    }
+    
     const message = `YOUR ACCOUNT
 
-Phone: ${customer.mobile_no}
-Name: ${customer.customer_name || 'Not provided'}
-Member Since: ${new Date(customer.creation).toLocaleDateString()}
+?? Name: ${customer.customer_name || 'Not provided'}
+?? Mobile: ${customer.mobile_no}
+?? Member Since: ${new Date(customer.creation).toLocaleDateString()}
 
-Your delivery address is stored with GPS coordinates.
+?? ${addressInfo}${bottleInfo}
+
+Payment Mode: ${customer.custom_payment_mode || 'Cash'}
 
 Need to update? Contact support.`;
     
     const buttons = [
+        { id: 'view_bottles', title: 'View Inventory' },
         { id: 'back_to_menu', title: 'Back to Menu' }
     ];
     
