@@ -18,6 +18,12 @@ const ERPNEXT_API_SECRET = process.env.ERPNEXT_API_SECRET || process.env.DOTORDE
 const KEEP_ALIVE_URL = process.env.KEEP_ALIVE_URL;
 const KEEP_ALIVE_INTERVAL = 25 * 60 * 1000;
 
+// Quick Order Configuration
+const STANDARD_BOTTLE_RATE = 7; // AED per bottle
+const MIN_ORDER_QUANTITY = 1;
+const MAX_ORDER_QUANTITY = 500;
+const VAT_RATE = 0.05; // 5% VAT
+
 // User sessions management
 const userSessions = new Map();
 
@@ -28,57 +34,67 @@ const SERVICE_AREAS = {
     dubai: { lat: 25.2048, lng: 55.2708, radius: 50 }
 };
 
-// Product catalog
+// Product catalog with VAT
 const PRODUCTS = {
     'coupon_10_1': { 
         name: '10+1 Coupon Book', 
-        price: 65, 
+        priceBeforeVAT: 65,
+        vat: 3.25,
+        price: 68.25, // Including 5% VAT
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 11,
         description: '10+1 Coupon Book - 11 bottles total (10 bottles + 1 FREE bonus bottle)',
         priority: 1,
-        salesPoints: ['11 bottles for AED 65', '1 FREE bottle included', 'Perfect for small families']
+        salesPoints: ['11 bottles', '1 FREE bottle included', 'Perfect for small families']
     },
     'coupon_25_5': { 
         name: '25+5 Coupon Book', 
-        price: 175, 
+        priceBeforeVAT: 175,
+        vat: 8.75,
+        price: 183.75, // Including 5% VAT
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 30,
         description: '25+5 Coupon Book - 30 bottles total (25 bottles + 5 FREE bonus bottles)',
         priority: 1,
-        salesPoints: ['30 bottles for AED 175', '5 FREE bottles included', 'Great value for families']
+        salesPoints: ['30 bottles', '5 FREE bottles included', 'Great value for families']
     },
     'coupon_30_7': { 
         name: '30+7 Coupon Book', 
-        price: 210, 
+        priceBeforeVAT: 210,
+        vat: 10.50,
+        price: 220.50, // Including 5% VAT
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 37,
         description: '30+7 Coupon Book - 37 bottles total (30 bottles + 7 FREE bonus bottles)',
         priority: 1,
-        salesPoints: ['37 bottles for AED 210', '7 FREE bottles included', 'Popular choice']
+        salesPoints: ['37 bottles', '7 FREE bottles included', 'Popular choice']
     },
     'coupon_100_40': { 
         name: '100+40 Coupon Book', 
-        price: 700, 
+        priceBeforeVAT: 700,
+        vat: 35,
+        price: 735, // Including 5% VAT
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 140,
         description: '100+40 Coupon Book - 140 bottles total (100 bottles + 40 FREE bonus bottles)',
         priority: 1,
-        salesPoints: ['140 bottles for AED 700', '40 FREE bottles included', 'Best value for offices']
+        salesPoints: ['140 bottles', '40 FREE bottles included', 'Best value for offices']
     },
     'coupon_100_cooler': { 
         name: '100 Bottles + Cooler', 
-        price: 800, 
+        priceBeforeVAT: 800,
+        vat: 40,
+        price: 840, // Including 5% VAT
         deposit: 0, 
         item_code: '5 Gallon Water',
         qty: 100,
         description: '100 Bottles + FREE Water Cooler - Complete water solution package',
         priority: 1,
-        salesPoints: ['100 bottles + FREE cooler', 'Complete package for AED 800', 'Perfect for offices']
+        salesPoints: ['100 bottles + FREE cooler', 'Complete package', 'Perfect for offices']
     }
 };
 
@@ -203,6 +219,20 @@ function buildExistingInfoMessage(customerInfo) {
     return info.join('\n');
 }
 
+// Determine emirate from area name
+function determineEmirate(area) {
+    if (!area) return 'Dubai';
+    
+    const areaLower = area.toLowerCase();
+    
+    if (areaLower.includes('ajman')) return 'Ajman';
+    if (areaLower.includes('sharjah')) return 'Sharjah';
+    if (areaLower.includes('dubai')) return 'Dubai';
+    if (areaLower.includes('qouz') || areaLower.includes('barsha')) return 'Dubai';
+    
+    return 'Dubai';
+}
+
 // Create customer with full information
 async function createCustomerInERP(registrationData) {
     try {
@@ -260,24 +290,9 @@ async function createCustomerInERP(registrationData) {
     }
 }
 
-function determineEmirate(area) {
-    if (!area) return 'Dubai';
-    
-    const areaLower = area.toLowerCase();
-    
-    if (areaLower.includes('ajman')) return 'Ajman';
-    if (areaLower.includes('sharjah')) return 'Sharjah';
-    if (areaLower.includes('dubai')) return 'Dubai';
-    if (areaLower.includes('qouz') || areaLower.includes('barsha')) return 'Dubai';
-    
-    // Default to Dubai
-    return 'Dubai';
-}
-
 // Create address record
 async function createAddressRecord(customerName, registrationData) {
     try {
-        // Determine emirate/city from area or use default
         const emirate = determineEmirate(registrationData.area);
         
         const addressData = {
@@ -285,12 +300,11 @@ async function createAddressRecord(customerName, registrationData) {
             address_title: customerName,
             address_type: 'Billing',
             address_line1: registrationData.area || '',
-            city: registrationData.buildingName || 'VILLA',  // Use building as city
+            city: registrationData.buildingName || 'VILLA',
             state: emirate,
             emirate: emirate,
             country: 'United Arab Emirates',
             phone: registrationData.phoneNumber || '',
-            // Custom fields for bottle tracking
             custom_bottle_in_hand: 0,
             custom_coupon_count: 0,
             custom_cooler_in_hand: 0,
@@ -304,7 +318,6 @@ async function createAddressRecord(customerName, registrationData) {
             }]
         };
         
-        // Add GPS coordinates if available
         if (registrationData.latitude && registrationData.longitude) {
             addressData.custom_latitude = registrationData.latitude;
             addressData.custom_longitude = registrationData.longitude;
@@ -478,7 +491,7 @@ async function getCustomerAddresses(customerName) {
     }
 }
 
-
+// Get full address details
 async function getFullAddressDetails(addressName) {
     try {
         const response = await axios.get(
@@ -496,10 +509,126 @@ async function getFullAddressDetails(addressName) {
         return null;
     }
 }
+
+// Update bottle inventory
+async function updateBottleInventory(customerName, bottlesToAdd, couponToAdd = 0) {
+    try {
+        const addresses = await getCustomerAddresses(customerName);
+        if (!addresses || addresses.length === 0) {
+            console.log('No address found for inventory update');
+            return { success: false, error: 'No address found' };
+        }
+        
+        const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+        const fullAddress = await getFullAddressDetails(primaryAddress.name);
+        
+        if (!fullAddress) {
+            return { success: false, error: 'Could not fetch address details' };
+        }
+        
+        const currentBottles = fullAddress.custom_bottle_in_hand || 0;
+        const currentCoupons = fullAddress.custom_coupon_count || 0;
+        
+        const updateData = {
+            custom_bottle_in_hand: currentBottles + bottlesToAdd,
+            custom_coupon_count: currentCoupons + couponToAdd
+        };
+        
+        const response = await axios.put(
+            `${ERPNEXT_URL}/api/resource/Address/${primaryAddress.name}`,
+            updateData,
+            {
+                headers: {
+                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        console.log('Inventory updated:', updateData);
+        return { 
+            success: true, 
+            newBottleCount: updateData.custom_bottle_in_hand,
+            newCouponCount: updateData.custom_coupon_count
+        };
+        
+    } catch (error) {
+        console.error('Error updating inventory:', error.response?.data || error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+// Validate quantity input
+function validateQuantity(input) {
+    const trimmed = String(input).trim();
+    
+    if (!/^\d+$/.test(trimmed)) {
+        return {
+            isValid: false,
+            error: 'Please enter a valid whole number (no decimals or letters)',
+            quantity: null
+        };
+    }
+    
+    const quantity = parseInt(trimmed, 10);
+    
+    if (isNaN(quantity)) {
+        return {
+            isValid: false,
+            error: 'Please enter a valid number',
+            quantity: null
+        };
+    }
+    
+    if (quantity < MIN_ORDER_QUANTITY) {
+        return {
+            isValid: false,
+            error: `Minimum order is ${MIN_ORDER_QUANTITY} bottle${MIN_ORDER_QUANTITY > 1 ? 's' : ''}`,
+            quantity: null
+        };
+    }
+    
+    if (quantity > MAX_ORDER_QUANTITY) {
+        return {
+            isValid: false,
+            error: `Maximum order is ${MAX_ORDER_QUANTITY} bottles. For larger orders, please contact support.`,
+            quantity: null
+        };
+    }
+    
+    return {
+        isValid: true,
+        error: null,
+        quantity: quantity
+    };
+}
+
+// Create direct order object from quantity
+function createDirectOrder(quantity) {
+    const totalPrice = quantity * STANDARD_BOTTLE_RATE;
+    
+    return {
+        name: `${quantity} x 5 Gallon Water`,
+        price: totalPrice,
+        deposit: 0,
+        item_code: '5 Gallon Water',
+        qty: quantity,
+        description: `${quantity} bottles of 5 Gallon Premium Water`,
+        priority: 1,
+        salesPoints: [
+            `${quantity} bottles of premium water`,
+            'Cash on delivery'
+        ],
+        isDirect: true,
+        priceBeforeVAT: 0, // Not applicable for direct orders
+        vat: 0
+    };
+}
+
 // Create sales order
 async function createSalesOrder(customerName, product, customerPhone) {
     try {
-        const ratePerBottle = product.price / product.qty;
+        const ratePerBottle = product.isDirect ? STANDARD_BOTTLE_RATE : (product.price / product.qty);
         
         const orderData = {
             doctype: 'Sales Order',
@@ -527,6 +656,8 @@ async function createSalesOrder(customerName, product, customerPhone) {
             });
         }
         
+        console.log('Creating order:', JSON.stringify(orderData, null, 2));
+        
         const response = await axios.post(
             `${ERPNEXT_URL}/api/resource/Sales Order`,
             orderData,
@@ -540,15 +671,14 @@ async function createSalesOrder(customerName, product, customerPhone) {
         
         console.log('Sales order created:', response.data.data.name);
         
-        // Update bottle inventory after successful order
-        // For coupon books, add to coupon count instead of bottle count
-        if (product.name.includes('Coupon')) {
-            await updateBottleInventory(customerName, 0, product.qty);
-        } else {
+        // Update bottle inventory
+        if (product.isDirect || !product.name.includes('Coupon')) {
             await updateBottleInventory(customerName, product.qty, 0);
+        } else {
+            await updateBottleInventory(customerName, 0, product.qty);
         }
         
-        // If package includes cooler, update cooler count
+        // Update cooler if included
         if (product.name.includes('Cooler')) {
             const addresses = await getCustomerAddresses(customerName);
             if (addresses && addresses.length > 0) {
@@ -581,49 +711,6 @@ async function createSalesOrder(customerName, product, customerPhone) {
     }
 }
 
-
-async function generateInventoryDetails(session) {
-    const customer = session.customerInfo;
-    const addresses = await getCustomerAddresses(customer.name);
-    
-    if (!addresses || addresses.length === 0) {
-        return {
-            message: "No inventory information available.\n\nPlace your first order to start tracking!",
-            buttons: [
-                { id: 'view_products', title: 'Order Now' },
-                { id: 'back_to_menu', title: 'Back' }
-            ]
-        };
-    }
-    
-    const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
-    
-    const bottleInHand = primaryAddress.custom_bottle_in_hand || 0;
-    const couponCount = primaryAddress.custom_coupon_count || 0;
-    const coolerInHand = primaryAddress.custom_cooler_in_hand || 0;
-    
-    const message = `?? YOUR INVENTORY
-
-?? BOTTLES IN HAND: ${bottleInHand}
-${bottleInHand > 0 ? '(Ready for use)' : '(Need to reorder)'}
-
-?? COUPON BALANCE: ${couponCount}
-${couponCount > 0 ? '(Redeem for bottles)' : '(Purchase coupon book)'}
-
-?? COOLER: ${coolerInHand > 0 ? 'YES ?' : 'NO ?'}
-
-${bottleInHand < 5 ? '\n?? LOW STOCK - Consider reordering!' : ''}
-
-What would you like to do?`;
-    
-    const buttons = [
-        { id: 'view_products', title: 'Order More' },
-        { id: 'back_to_menu', title: 'Back' }
-    ];
-    
-    return { message, buttons };
-}
-
 // Extract location coordinates
 function extractLocationCoordinates(message) {
     if (message.location) {
@@ -637,7 +724,7 @@ function extractLocationCoordinates(message) {
     return null;
 }
 
-// Validate service area - FIXED to find closest city
+// Validate service area
 function validateServiceArea(latitude, longitude) {
     let closestMatch = null;
     let minDistance = Infinity;
@@ -821,7 +908,7 @@ function generateMoreOptionsMenu() {
     return { message, buttons };
 }
 
-// Generate product list
+// Generate product list with VAT
 function generateProductListMessage() {
     const sections = [
         {
@@ -829,18 +916,18 @@ function generateProductListMessage() {
             rows: [
                 {
                     id: "product_coupon_10_1",
-                    title: "10+1 - AED 65",
-                    description: "11 bottles total. 1 FREE bottle. Small families."
+                    title: "10+1 - AED 68.25",
+                    description: "11 bottles. AED 65 + VAT 3.25"
                 },
                 {
                     id: "product_coupon_25_5",
-                    title: "25+5 - AED 175",
-                    description: "30 bottles total. 5 FREE bottles. Great value!"
+                    title: "25+5 - AED 183.75",
+                    description: "30 bottles. AED 175 + VAT 8.75"
                 },
                 {
                     id: "product_coupon_30_7",
-                    title: "30+7 - AED 210",
-                    description: "37 bottles total. 7 FREE bottles. Popular!"
+                    title: "30+7 - AED 220.50",
+                    description: "37 bottles. AED 210 + VAT 10.50"
                 }
             ]
         },
@@ -849,13 +936,13 @@ function generateProductListMessage() {
             rows: [
                 {
                     id: "product_coupon_100_40",
-                    title: "100+40 - AED 700",
-                    description: "140 bottles. 40 FREE bottles. Best value!"
+                    title: "100+40 - AED 735",
+                    description: "140 bottles. AED 700 + VAT 35"
                 },
                 {
                     id: "product_coupon_100_cooler",
-                    title: "100+Cooler - 800",
-                    description: "100 bottles + FREE cooler. Complete solution!"
+                    title: "100+Cooler - AED 840",
+                    description: "100 bottles + FREE cooler. AED 800 + VAT 40"
                 }
             ]
         }
@@ -866,7 +953,7 @@ function generateProductListMessage() {
         buttons: null,
         listData: {
             header: "WATER DELIVERY",
-            body: "Choose your package. All coupon books include FREE bonus bottles!\n\nTap 'View Products' below.",
+            body: "Choose your package. All prices include 5% VAT!\n\nAll coupon books include FREE bonus bottles!\n\nTap 'View Products' below.",
             buttonText: "View Products",
             footer: "Cash on delivery",
             sections: sections
@@ -877,26 +964,50 @@ function generateProductListMessage() {
 // Generate order confirmation
 function generateOrderConfirmation(session) {
     const product = session.currentOrder;
-    const total = product.price + product.deposit;
     
-    const message = `ORDER CONFIRMATION
+    let message = '';
+    
+    if (product.isDirect) {
+        // Quick order - no price shown
+        message = `? ORDER CONFIRMATION
 
-Product: ${product.name}
-Quantity: ${product.qty} bottles
-Price: AED ${product.price}${product.deposit > 0 ? `\nDeposit: AED ${product.deposit}` : ''}
-TOTAL: AED ${total}
+?? Product: ${product.name}
+?? Quantity: ${product.qty} bottles
 
-Benefits:
-${product.salesPoints.map(point => `- ${point}`).join('\n')}
+? Benefits:
+${product.salesPoints.map(point => `  • ${point}`).join('\n')}
 
-Delivery: Your registered address
-Payment: Cash on delivery
+?? Delivery: Your registered address
+?? Payment: Cash on delivery
 
 Confirm your order?`;
+    } else {
+        // Coupon package - show price breakdown with VAT
+        const total = product.price + product.deposit;
+        
+        message = `? ORDER CONFIRMATION
+
+?? Product: ${product.name}
+?? Quantity: ${product.qty} bottles
+
+?? PRICE BREAKDOWN:
+  • Base Price: AED ${product.priceBeforeVAT.toFixed(2)}
+  • VAT (5%): AED ${product.vat.toFixed(2)}
+  • Net Price: AED ${product.price.toFixed(2)}${product.deposit > 0 ? `\n  • Deposit: AED ${product.deposit.toFixed(2)}` : ''}
+  • TOTAL: AED ${total.toFixed(2)}
+
+? Benefits:
+${product.salesPoints.map(point => `  • ${point}`).join('\n')}
+
+?? Delivery: Your registered address
+?? Payment: Cash on delivery
+
+Confirm your order?`;
+    }
     
     const buttons = [
-        { id: 'confirm_order', title: 'Confirm Order' },
-        { id: 'cancel_order', title: 'Cancel' }
+        { id: 'confirm_order', title: '? Confirm Order' },
+        { id: 'cancel_order', title: '? Cancel' }
     ];
     
     return { message, buttons };
@@ -924,60 +1035,9 @@ How can we help you?`;
     return { message, buttons };
 }
 
-async function updateBottleInventory(customerName, bottlesToAdd, couponToAdd = 0) {
-    try {
-        // Get customer's primary address
-        const addresses = await getCustomerAddresses(customerName);
-        if (!addresses || addresses.length === 0) {
-            console.log('No address found for inventory update');
-            return { success: false, error: 'No address found' };
-        }
-        
-        const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
-        
-        // Get full address details
-        const fullAddress = await getFullAddressDetails(primaryAddress.name);
-        if (!fullAddress) {
-            return { success: false, error: 'Could not fetch address details' };
-        }
-        
-        const currentBottles = fullAddress.custom_bottle_in_hand || 0;
-        const currentCoupons = fullAddress.custom_coupon_count || 0;
-        
-        // Update inventory
-        const updateData = {
-            custom_bottle_in_hand: currentBottles + bottlesToAdd,
-            custom_coupon_count: currentCoupons + couponToAdd
-        };
-        
-        const response = await axios.put(
-            `${ERPNEXT_URL}/api/resource/Address/${primaryAddress.name}`,
-            updateData,
-            {
-                headers: {
-                    'Authorization': `token ${ERPNEXT_API_KEY}:${ERPNEXT_API_SECRET}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        
-        console.log('Inventory updated:', updateData);
-        return { 
-            success: true, 
-            newBottleCount: updateData.custom_bottle_in_hand,
-            newCouponCount: updateData.custom_coupon_count
-        };
-        
-    } catch (error) {
-        console.error('Error updating inventory:', error.response?.data || error.message);
-        return { success: false, error: error.message };
-    }
-}
-
+// Generate account info
 async function generateAccountInfo(session) {
     const customer = session.customerInfo;
-    
-    // Get customer addresses with full details
     const addresses = await getCustomerAddresses(customer.name);
     
     let addressInfo = 'Address: Not set';
@@ -986,7 +1046,6 @@ async function generateAccountInfo(session) {
     if (addresses && addresses.length > 0) {
         const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
         
-        // Build address display
         const addressParts = [];
         if (primaryAddress.city) addressParts.push(primaryAddress.city);
         if (primaryAddress.address_line1) addressParts.push(primaryAddress.address_line1);
@@ -994,7 +1053,6 @@ async function generateAccountInfo(session) {
         
         addressInfo = `Address: ${addressParts.join(', ')}`;
         
-        // Build bottle/coupon info
         const bottleInHand = primaryAddress.custom_bottle_in_hand || 0;
         const couponCount = primaryAddress.custom_coupon_count || 0;
         const coolerInHand = primaryAddress.custom_cooler_in_hand || 0;
@@ -1024,6 +1082,49 @@ Need to update? Contact support.`;
     const buttons = [
         { id: 'view_bottles', title: 'View Inventory' },
         { id: 'back_to_menu', title: 'Back to Menu' }
+    ];
+    
+    return { message, buttons };
+}
+
+// Generate inventory details
+async function generateInventoryDetails(session) {
+    const customer = session.customerInfo;
+    const addresses = await getCustomerAddresses(customer.name);
+    
+    if (!addresses || addresses.length === 0) {
+        return {
+            message: "No inventory information available.\n\nPlace your first order to start tracking!",
+            buttons: [
+                { id: 'view_products', title: 'Order Now' },
+                { id: 'back_to_menu', title: 'Back' }
+            ]
+        };
+    }
+    
+    const primaryAddress = addresses.find(addr => addr.is_primary_address === 1) || addresses[0];
+    
+    const bottleInHand = primaryAddress.custom_bottle_in_hand || 0;
+    const couponCount = primaryAddress.custom_coupon_count || 0;
+    const coolerInHand = primaryAddress.custom_cooler_in_hand || 0;
+    
+    const message = `?? YOUR INVENTORY
+
+?? BOTTLES IN HAND: ${bottleInHand}
+${bottleInHand > 0 ? '(Ready for use)' : '(Need to reorder)'}
+
+?? COUPON BALANCE: ${couponCount}
+${couponCount > 0 ? '(Redeem for bottles)' : '(Purchase coupon book)'}
+
+?? COOLER: ${coolerInHand > 0 ? 'YES ?' : 'NO ?'}
+
+${bottleInHand < 5 ? '\n?? LOW STOCK - Consider reordering!' : ''}
+
+What would you like to do?`;
+    
+    const buttons = [
+        { id: 'view_products', title: 'Order More' },
+        { id: 'back_to_menu', title: 'Back' }
     ];
     
     return { message, buttons };
@@ -1072,33 +1173,6 @@ Reply with:
     return { message, buttons };
 }
 
-// Recommend package by quantity
-function recommendPackageByQuantity(requestedQty, session) {
-    let recommended = null;
-    
-    if (requestedQty <= 15) {
-        recommended = PRODUCTS.coupon_10_1;
-    } else if (requestedQty <= 35) {
-        recommended = PRODUCTS.coupon_25_5;
-    } else if (requestedQty <= 50) {
-        recommended = PRODUCTS.coupon_30_7;
-    } else if (requestedQty <= 120) {
-        recommended = PRODUCTS.coupon_100_40;
-    } else {
-        recommended = PRODUCTS.coupon_100_cooler;
-    }
-    
-    session.currentOrder = recommended;
-    session.state = 'confirming_order';
-    
-    const confirmMsg = generateOrderConfirmation(session);
-    
-    return {
-        message: `Based on ${requestedQty} bottles, I recommend:\n\n${confirmMsg.message}`,
-        buttons: confirmMsg.buttons
-    };
-}
-
 // Start profile completion
 async function startProfileCompletion(session) {
     const missing = findMissingFields(session.customerInfo);
@@ -1123,6 +1197,32 @@ async function startProfileCompletion(session) {
     
     session.state = 'registered';
     return generateMainMenu(session);
+}
+
+// Handle quick order quantity
+async function handleQuickOrderQuantity(messageBody, session) {
+    const validation = validateQuantity(messageBody);
+    
+    if (!validation.isValid) {
+        return {
+            message: `? ${validation.error}\n\nPlease enter the number of bottles you need.\n\nExample: 10, 25, 50, 100`,
+            buttons: [
+                { id: 'view_products', title: 'View Packages' },
+                { id: 'back_to_menu', title: 'Back' }
+            ]
+        };
+    }
+    
+    const directOrder = createDirectOrder(validation.quantity);
+    session.currentOrder = directOrder;
+    session.state = 'confirming_order';
+    
+    const confirmation = generateOrderConfirmation(session);
+    
+    return {
+        message: confirmation.message,
+        buttons: confirmation.buttons
+    };
 }
 
 // Main message handler
@@ -1213,7 +1313,13 @@ async function handleButtonReply(buttonId, session) {
         case 'quick_order':
             session.state = 'quick_ordering';
             return {
-                message: "How many 5-gallon bottles do you need?\n\nType the number (e.g., 10, 25, 50, 100) and I'll suggest the best package.",
+                message: `?? QUICK ORDER
+
+How many 5-gallon bottles do you need?
+
+Type the exact quantity (e.g., 10, 25, 50, 100)
+
+We'll prepare your order immediately!`,
                 buttons: [
                     { id: 'view_products', title: 'View Packages' },
                     { id: 'back_to_menu', title: 'Back' }
@@ -1294,6 +1400,9 @@ async function handleButtonReply(buttonId, session) {
             
         case 'cancel_order':
             return await handleOrderConfirmation('no', session);
+            
+        case 'view_bottles':
+            return await generateInventoryDetails(session);
             
         default:
             return { message: "I didn't understand that. Please try again.", buttons: null };
@@ -1510,7 +1619,6 @@ async function handleTextMessage(messageBody, session) {
             return generateAddressConfirmation(session);
             
         case 'confirming_address_details':
-            // Handle numeric input for editing
             if (text === '1') {
                 session.state = 'editing_name';
                 return { message: `Current: ${session.registrationData.name}\n\nEnter new name:`, buttons: null };
@@ -1540,17 +1648,7 @@ async function handleTextMessage(messageBody, session) {
             };
             
         case 'quick_ordering':
-            const qty = parseInt(text);
-            if (isNaN(qty) || qty < 1) {
-                return {
-                    message: "Enter a valid number of bottles (e.g., 10, 25, 50)",
-                    buttons: [
-                        { id: 'view_products', title: 'View Packages' },
-                        { id: 'back_to_menu', title: 'Back' }
-                    ]
-                };
-            }
-            return recommendPackageByQuantity(qty, session);
+            return await handleQuickOrderQuantity(messageBody, session);
             
         case 'registered':
             return await handleRegisteredCustomerMessage(text, session);
@@ -1671,13 +1769,23 @@ async function handleOrderConfirmation(text, session) {
             session.currentOrder = null;
             
             const mainMenu = generateMainMenu(session);
-            return {
-                message: `ORDER CONFIRMED!
-
-Order: ${orderResult.orderName}
+            
+            let orderSummary = '';
+            if (currentOrder.isDirect) {
+                orderSummary = `Order: ${orderResult.orderName}
+Product: ${currentOrder.name}
+Quantity: ${currentOrder.qty} bottles`;
+            } else {
+                orderSummary = `Order: ${orderResult.orderName}
 Product: ${currentOrder.name}
 Quantity: ${currentOrder.qty} bottles
-Total: AED ${currentOrder.price + currentOrder.deposit}
+Total: AED ${(currentOrder.price + currentOrder.deposit).toFixed(2)}`;
+            }
+            
+            return {
+                message: `? ORDER CONFIRMED!
+
+${orderSummary}
 
 NEXT STEPS:
 - Team will call within 2 hours
@@ -1749,15 +1857,14 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        version: '14.0.0-Complete-Enhanced-Flow',
+        version: '15.0.0-Complete-With-VAT',
         activeSessions: userSessions.size,
         features: {
-            closestCityDetection: true,
-            naturalLanguage: true,
-            productsFirstFlow: true,
-            profileConfirmation: true,
-            quickOrder: true,
-            globalNavigation: true
+            quickOrderDirect: true,
+            vatPricing: true,
+            inventoryTracking: true,
+            addressSaving: true,
+            closestCityDetection: true
         }
     });
 });
@@ -1806,7 +1913,7 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>WhatsApp Bot v14.0 - Enhanced</title>
+        <title>WhatsApp Bot v15.0 - Complete</title>
         <style>
             body { font-family: Arial; margin: 20px; background: #f5f5f5; }
             .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
@@ -1818,21 +1925,20 @@ app.get('/', (req, res) => {
     </head>
     <body>
         <div class="container">
-            <h1>WhatsApp Water Delivery Bot v14.0</h1>
+            <h1>WhatsApp Water Delivery Bot v15.0</h1>
             <div class="status">
                 <h2>Status: <span class="active">ACTIVE</span></h2>
-                <p><strong>Version:</strong> 14.0.0-Complete-Enhanced-Flow</p>
+                <p><strong>Version:</strong> 15.0.0-Complete-With-VAT</p>
                 <p><strong>Active Sessions:</strong> ${userSessions.size}</p>
             </div>
             
-            <h3>ALL FIXES IMPLEMENTED:</h3>
-            <div class="feature">1. Location: Finds CLOSEST city (Ajman shows correctly)</div>
-            <div class="feature">2. Natural Language: "I need water", "back", "menu" work everywhere</div>
-            <div class="feature">3. New Customer: Shows products first, collects details after selection</div>
-            <div class="feature">4. Old Customer: Quick order with quantity input</div>
-            <div class="feature">5. Profile: Shows existing details, allows editing, requires confirmation</div>
-            <div class="feature">6. Navigation: "Back to menu" works from any state</div>
-            <div class="feature">7. Complaints/Support: Easy access from main menu</div>
+            <h3>FEATURES:</h3>
+            <div class="feature">? Quick Order: Direct quantity input (no price shown)</div>
+            <div class="feature">? Coupon Packages: Price + 5% VAT breakdown</div>
+            <div class="feature">? Address Saving: Proper ERPNext format with GPS</div>
+            <div class="feature">? Inventory Tracking: Bottles, coupons, cooler</div>
+            <div class="feature">? Profile Management: Complete customer details</div>
+            <div class="feature">? Service Area: Closest city detection</div>
         </div>
     </body>
     </html>
@@ -1840,7 +1946,9 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`WhatsApp Bot v14.0 on port ${PORT}`);
-    console.log('All enhancements active');
+    console.log(`WhatsApp Bot v15.0 on port ${PORT}`);
+    console.log('? Quick Order: No price display');
+    console.log('? Coupon Packages: Price + 5% VAT');
+    console.log('? All features active');
     startKeepAlive();
 });
