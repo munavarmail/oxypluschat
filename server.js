@@ -1,15 +1,16 @@
-require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 
 const app = express();
 app.use(express.json());
 
-// Configuration from .env file
-const PORT = process.env.PORT || 3000;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-const GRAPH_API_TOKEN = process.env.GRAPH_API_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+// ===== PASTE YOUR CREDENTIALS HERE =====
+const PORT = 3000;
+const VERIFY_TOKEN = 'oxyplusbot_2030';
+const GRAPH_API_TOKEN = 'EAASQlOvZAJ3gBPu2EcRJv8X0toyE6i2iuYv9cpANEzELU7EJgEsCBjV1tUlHd0n3WtGpM1obXaKoYL5Q4AEzF8NnIUm9CyfmDbhVn2HUSn6EH0lswA8aZC09QMDEZBHDsgZCbOiPaFAcRPMdqNc3aRHBZBb2IG2yIxaBgfGSZAcujy2Vrs6WOjAHAHew83vHBZA0Wc83cHeEZBUdE5IAEgmcZCAkQ3ytDsVA2eHdThuE5
+';  // ? REPLACE THIS
+const PHONE_NUMBER_ID = '755591667635998';
+// ========================================
 
 // Simple homepage
 app.get('/', (req, res) => {
@@ -20,6 +21,8 @@ app.get('/', (req, res) => {
                 <h1>? WhatsApp Bot is Running!</h1>
                 <p>Server is active and ready to receive messages</p>
                 <p><strong>Port:</strong> ${PORT}</p>
+                <p><strong>Token Set:</strong> ${GRAPH_API_TOKEN !== 'EAASQlOvZAJ3gBPu2EcRJv8X0toyE6i2iuYv9cpANEzELU7EJgEsCBjV1tUlHd0n3WtGpM1obXaKoYL5Q4AEzF8NnIUm9CyfmDbhVn2HUSn6EH0lswA8aZC09QMDEZBHDsgZCbOiPaFAcRPMdqNc3aRHBZBb2IG2yIxaBgfGSZAcujy2Vrs6WOjAHAHew83vHBZA0Wc83cHeEZBUdE5IAEgmcZCAkQ3ytDsVA2eHdThuE5
+' ? '? Yes' : '? No - Update token!'}</p>
                 <p><strong>Status:</strong> Online</p>
             </body>
         </html>
@@ -123,8 +126,14 @@ Type "help" to see what I can do! ??`;
 
 // Send message via WhatsApp API
 async function sendMessage(to, text) {
+    // Check if token is set
+    if (GRAPH_API_TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+        console.error('? ERROR: GRAPH_API_TOKEN not set! Please update the token at the top of bot.js');
+        return;
+    }
+    
     try {
-        await axios.post(
+        const response = await axios.post(
             `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
             {
                 messaging_product: 'whatsapp',
@@ -139,15 +148,42 @@ async function sendMessage(to, text) {
             }
         );
         console.log('? Message sent successfully');
+        return response.data;
     } catch (error) {
         console.error('? Error sending message:', error.response?.data || error.message);
+        
+        // Show helpful error messages
+        if (error.response?.data?.error?.code === 190) {
+            console.error('');
+            console.error('?? TOKEN ERROR: Your access token is invalid or expired!');
+            console.error('?? Get a new token from: https://developers.facebook.com/apps/1284869193279352/whatsapp-business/wa-dev-console/');
+            console.error('');
+        }
     }
 }
 
 // Start server
 app.listen(PORT, () => {
-    console.log('?? Simple WhatsApp Bot Started!');
+    console.log('');
+    console.log('?? ================================');
+    console.log('   Simple WhatsApp Bot Started!');
+    console.log('?? ================================');
+    console.log('');
     console.log(`?? Server running on port ${PORT}`);
     console.log(`?? Visit: http://localhost:${PORT}`);
-    console.log('? Ready to receive messages!');
+    console.log('');
+    
+    // Check if token is set
+    if (GRAPH_API_TOKEN === 'PASTE_YOUR_TOKEN_HERE') {
+        console.log('??  WARNING: Token not set!');
+        console.log('?? Please edit bot.js and add your GRAPH_API_TOKEN');
+        console.log('');
+    } else {
+        console.log('? Token configured');
+        console.log(`?? Phone Number ID: ${PHONE_NUMBER_ID}`);
+        console.log(`?? Verify Token: ${VERIFY_TOKEN}`);
+        console.log('');
+        console.log('? Ready to receive messages!');
+    }
+    console.log('');
 });
